@@ -162,6 +162,16 @@
                             <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Submit Your Contribution</h2>
                             
                             <form id="donation-form" onsubmit="window.handleDonationSubmit(event)">
+                                
+                                <!-- NEW: Charity Selection Dropdown -->
+                                <div class="mb-6">
+                                    <label for="target-charity-id" class="block text-sm font-medium text-gray-700 mb-1">Select Charity Partner</label>
+                                    <select name="targetCharityId" id="target-charity-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-shadow" required>
+                                        <!-- Options populated by JS -->
+                                    </select>
+                                </div>
+                                <!-- END NEW DROPDOWN -->
+
                                 <div class="flex space-x-2 border-b mb-6">
                                     <button type="button" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition-colors" data-type="financial" onclick="window.selectDonationType('financial')">Financial</button>
                                     <button type="button" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition-colors" data-type="food" onclick="window.selectDonationType('food')">Food Items</button>
@@ -248,7 +258,7 @@
                 <form id="login-form">
                     <div class="mb-4">
                         <label for="login-id" class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
-                        <input type="text" id="login-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition-shadow" placeholder="e.g., admin or bd_relief" required>
+                        <input type="text" id="login-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition-shadow" placeholder="e.g., admin or brac" required>
                     </div>
                     <div class="mb-6">
                         <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
@@ -258,7 +268,7 @@
                         Log In
                     </button>
                     <p class="mt-4 text-sm text-gray-500 text-center">Admin ID: `admin`, Pass: `uniadmin`</p>
-                    <p class="text-sm text-gray-500 text-center">Charity IDs: `bd_relief`, `child_hope` etc., Pass: e.g., `bdrelief123`</p>
+                    <p class="text-sm text-gray-500 text-center">Charity IDs: `as_sunnah`, `brac`, `bidyanondo` etc., Pass: e.g., `brac123`</p>
                 </form>
             </div>
 
@@ -414,12 +424,13 @@
             "You can’t help everyone, but everyone can help someone."
         ];
 
-        // Mock Charity Data for initial setup
+        // Mock Charity Data for initial setup (Updated with real BD foundations)
         const MOCK_CHARITIES = [
-            { id: 'bd_relief', name: 'Bangladesh Flood Relief', totalGained: 150000, region: 'Sylhet', needs: 'Winter blankets, $10000 for housing, Medicine', password: 'bdrelief123' },
-            { id: 'child_hope', name: 'Children’s Hope Center', totalGained: 85000, region: 'Dhaka', needs: 'Children\'s books, New toys, School supplies', password: 'childhope123' },
-            { id: 'food_bank', name: 'Dhaka Community Food Bank', totalGained: 120000, region: 'Dhaka', needs: 'Rice bags, Lentils, Fresh produce', password: 'foodbank123' },
-            { id: 'elder_care', name: 'Elderly Support Foundation', totalGained: 60000, region: 'Chittagong', needs: 'Adult diapers, Walking sticks, Caretaker wages', password: 'eldercare123' },
+            { id: 'brac', name: 'BRAC', totalGained: 250000, region: 'Nationwide', needs: 'Microfinance aid, $100000 for education, Sanitary pads', password: 'brac123' },
+            { id: 'bidyanondo', name: 'Bidyanondo Foundation', totalGained: 180000, region: 'Dhaka', needs: 'School supplies, Rice bags, Volunteer funding', password: 'bidyanondo123' },
+            { id: 'as_sunnah', name: 'As-Sunnah Foundation', totalGained: 150000, region: 'Chittagong', needs: 'Winter blankets, Disaster relief funds, Medicine', password: 'assunnah123' },
+            { id: 'jaago', name: 'Jaago Foundation', totalGained: 120000, region: 'Dhaka', needs: 'Laptops, Children\'s books, Teacher salaries', password: 'jaago123' },
+            { id: 'mastul', name: 'Mastul Foundation', totalGained: 95000, region: 'Rajshahi', needs: 'Orphanage support, Food packages, Clothing', password: 'mastul123' },
         ];
 
         // --- Firebase Initialization and Auth ---
@@ -492,7 +503,7 @@
             window.pendingDonations = []; 
             window.auditHistory = []; 
             
-            // Mock Confirmation Function
+            // Mock Confirmation Function (Admin Approval Logic)
             window.handleConfirmDonation = (id, type, amount, charityId) => {
                 const pendingIndex = window.pendingDonations.findIndex(d => d.id === id);
                 if (pendingIndex > -1) {
@@ -509,7 +520,9 @@
                             charity.totalGained += amount;
                         }
                     }
-                    window.showModal('success', 'Confirmation Success', `Mock Donation ID ${id} confirmed and logged!`);
+                    
+                    // FIX: Remove "Mock" from confirmation message
+                    window.showModal('success', 'Confirmation Success', `Donation ID ${id} confirmed and logged by Admin.`);
                     window.renderPendingDonations(window.pendingDonations);
                     window.renderAuditHistory(window.auditHistory);
                     window.renderCharityNeeds(window.charityNeeds);
@@ -523,7 +536,8 @@
                 const form = event.target;
                 const formData = new FormData(form);
                 const type = formData.get('donationType');
-                const targetCharityId = document.querySelector('.charity-card.match-highlight')?.id || 'bd_relief';
+                // Target charity is now read directly from the dropdown
+                const targetCharityId = formData.get('targetCharityId');
                 
                 let data = {};
                 let amount = 0;
@@ -533,6 +547,8 @@
                     data = { amount: amount };
                 } else if (type === 'food' || type === 'goods') {
                     data = { items: formData.get('items').trim() };
+                    // FIX: Ensure amount is 0 for non-financial items
+                    amount = 0; 
                 }
 
                 const newId = crypto.randomUUID();
@@ -552,7 +568,9 @@
                 window.donorDonations.push(newDonation);
                 form.reset();
                 window.selectDonationType('financial');
-                window.showModal('success', 'Donation Logged (Mock)', `Your ${type} donation has been logged locally and is awaiting mock confirmation.`);
+                
+                // FIX: Remove "Mock" from donation logged message
+                window.showModal('success', 'Donation Logged', `Your ${type} donation has been logged and is awaiting Admin confirmation.`);
                 
                 window.renderPendingDonations(window.pendingDonations);
                 window.renderMyDonations(window.donorDonations);
@@ -585,6 +603,7 @@
             onSnapshot(charityNeedsPath(), (snapshot) => {
                 window.charityNeeds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 window.renderCharityNeeds(window.charityNeeds);
+                window.populateCharityDropdown(window.charityNeeds); // NEW
                 window.handleMatching();
             }, (error) => console.error("Error fetching charity needs:", error));
 
@@ -634,7 +653,8 @@
             const form = event.target;
             const formData = new FormData(form);
             const type = formData.get('donationType');
-            const targetCharityId = document.querySelector('.charity-card.match-highlight')?.id || 'bd_relief';
+            // READ FROM NEW DROPDOWN
+            const targetCharityId = formData.get('targetCharityId'); 
             let data = {};
             let amount = 0;
 
@@ -642,6 +662,11 @@
             if (!currentUserId && !FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
                 window.showModal('error', 'Authentication Required', 'Please ensure you are signed in or authenticated anonymously to make a donation.');
                 return;
+            }
+            
+            if (!targetCharityId) {
+                 window.showModal('error', 'Charity Selection', 'Please select a charity partner from the dropdown.');
+                 return;
             }
 
             if (type === 'financial') {
@@ -658,6 +683,8 @@
                     return;
                 }
                 data = { items: items };
+                // FIX: Explicitly set amount to 0 for non-financial types
+                amount = 0; 
             } else {
                 window.showModal('error', 'Invalid Type', 'Unknown donation type selected.');
                 return;
@@ -717,6 +744,7 @@
                 const donationData = donationSnap.data();
 
                 // 2. Update Charity Total Gained (Financial Only)
+                // FIX: Only update totalGained if type is financial
                 if (type === 'financial') {
                     const charitySnap = await getDoc(charityRef);
                     if (charitySnap.exists()) {
@@ -780,6 +808,18 @@
         };
 
         // --- Rendering Functions ---
+        
+        /**
+         * Populates the Charity selection dropdown.
+         */
+        const populateCharityDropdown = (needsArray) => {
+            const selectElement = document.getElementById('target-charity-id');
+            if (!selectElement) return;
+
+            selectElement.innerHTML = needsArray.map(charity => 
+                `<option value="${charity.id}">${charity.name} (${charity.region})</option>`
+            ).join('');
+        }
 
         /**
          * Renders the dynamic quote section.
@@ -825,7 +865,7 @@
                 const isMatch = needsList.some(need => 
                     (selectedType === 'financial' && need.toLowerCase().includes('$')) ||
                     (selectedType === 'food' && (need.toLowerCase().includes('rice') || need.toLowerCase().includes('food') || need.toLowerCase().includes('lentils') || need.toLowerCase().includes('produce'))) ||
-                    (selectedType === 'goods' && (need.toLowerCase().includes('coats') || need.toLowerCase().includes('blankets') || need.toLowerCase().includes('supplies') || need.toLowerCase().includes('books') || need.toLowerCase().includes('toys')))
+                    (selectedType === 'goods' && (need.toLowerCase().includes('coats') || need.toLowerCase().includes('blankets') || need.toLowerCase().includes('supplies') || need.toLowerCase().includes('books') || need.toLowerCase().includes('toys') || need.toLowerCase().includes('clothing')))
                 );
                 
                 const matchClass = isMatch ? 'match-highlight border-teal-500' : 'border-gray-200';
@@ -847,6 +887,9 @@
                     </div>
                 `;
             }).join('');
+
+            // Also populate the dropdown list whenever charity data updates
+            populateCharityDropdown(needsArray);
         };
 
 
@@ -868,7 +911,15 @@
             tbody.innerHTML = sortedDonations.map(d => {
                 const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : (d.timestamp?.toLocaleDateString() || 'N/A');
                 const statusClass = d.status === 'Confirmed' ? 'text-green-600 font-bold' : 'text-yellow-600';
-                const details = d.type === 'financial' ? `${d.amount.toLocaleString()} BDT` : (d.data?.items || 'N/A');
+                
+                let details;
+                if (d.data && d.data.items) {
+                    details = d.data.items;
+                } else if (d.type === 'financial' && d.amount !== undefined) {
+                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                } else {
+                    details = 'N/A';
+                }
 
                 return `
                     <tr class="hover:bg-gray-50">
@@ -900,14 +951,30 @@
 
             tbody.innerHTML = pending.map(d => {
                 const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : (d.timestamp?.toLocaleDateString() || 'N/A');
-                const details = d.type === 'financial' ? `${d.amount.toLocaleString()} BDT` : (d.data?.items || 'N/A');
-                // Ensure amount is safe for inline function call
-                const amount = d.amount || 0;
+                
+                // --- FIX: Robustly determine details display ---
+                let details;
+                if (d.data && d.data.items) {
+                    // Item donation (Food/Goods): Display the item description
+                    details = d.data.items;
+                } else if (d.type === 'financial' && d.amount !== undefined) {
+                    // Financial donation: Display the amount
+                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                } else {
+                    details = 'N/A (Corrupted)';
+                }
+                // --- END FIX ---
+                
+                // FIX: Get capitalized type name for display
+                const typeDisplay = d.type.charAt(0).toUpperCase() + d.type.slice(1);
+                
+                // Ensure amount is safe for inline function call (0 for non-financial)
+                const amount = d.amount || 0; 
 
                 return `
                     <tr class="hover:bg-yellow-50">
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${d.type.charAt(0).toUpperCase() + d.type.slice(1)}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${typeDisplay}</td>
                         <td class="px-4 py-4 whitespace-pre-wrap text-sm text-gray-700 max-w-xs">${details}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charityId}</td>
                         <td class="px-4 py-4 whitespace-nowrap">
@@ -938,12 +1005,25 @@
 
             tbody.innerHTML = history.map(d => {
                 const date = d.confirmationTimestamp?.toDate ? d.confirmationTimestamp.toDate().toLocaleDateString() : (d.confirmationTimestamp?.toLocaleDateString() || 'N/A');
-                const details = d.type === 'financial' ? `${d.amount.toLocaleString()} BDT` : (d.data?.items || 'N/A');
+                
+                // --- FIX: Robustly determine details display ---
+                let details;
+                if (d.data && d.data.items) {
+                    details = d.data.items;
+                } else if (d.type === 'financial' && d.amount !== undefined) {
+                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                } else {
+                    details = 'N/A (Corrupted)';
+                }
+                // --- END FIX ---
+                
+                const typeDisplay = d.type.charAt(0).toUpperCase() + d.type.slice(1);
+
 
                 return `
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${d.type.charAt(0).toUpperCase() + d.type.slice(1)}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${typeDisplay}</td>
                         <td class="px-4 py-4 whitespace-pre-wrap text-sm text-gray-700 max-w-xs">${details}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charityId}</td>
                     </tr>
@@ -1027,7 +1107,7 @@
                     adminView.classList.remove('hidden');
                     break;
                 case 'charity':
-                    const charityId = document.getElementById('login-id')?.value?.toLowerCase() || 'bd_relief'; // Fallback
+                    const charityId = document.getElementById('login-id')?.value?.toLowerCase() || 'brac'; // Fallback
                     const charityInfo = window.charityNeeds.find(c => c.id === charityId);
                     if (charityInfo) {
                          document.getElementById('charity-info').innerHTML = `<p class="text-xl font-bold">${charityInfo.name}</p><p class="text-sm text-gray-500">ID: ${charityId}</p>`;
@@ -1052,6 +1132,11 @@
                 if (auth && auth.currentUser) {
                     await auth.signOut();
                 }
+                
+                // FIX: Clear login fields on sign out to ensure state reset
+                document.getElementById('login-id').value = '';
+                document.getElementById('login-password').value = '';
+                
                 // Reset everything to donor view
                 window.lastNotificationCount = 0;
                 document.getElementById('notification-count').classList.add('opacity-0');
