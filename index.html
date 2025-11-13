@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniDonate - Unified Charity Donation System | Real-time Asset Management</title>
+    <!-- SEO Enhancement -->
+    <meta name="description" content="UniDonate: A centralized platform for unified charity donation and management supporting financial, food, and goods contributions. Real-time needs matching for Bangladesh charities.">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e6f0fa; /* Lighter, calming blue background */
+        }
+        .scroll-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 0.5rem;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+        }
+        .active-tab {
+            background-color: #1e40af; /* Deeper blue primary */
+            color: white;
+            box-shadow: 0 4px 10px rgba(30, 64, 175, 0.5);
+            transform: translateY(-2px);
+            font-weight: 700;
+        }
+        .charity-card {
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08); /* Standard shadow */
+        }
+        .charity-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2); /* Enhanced hover shadow */
+        }
+        .match-highlight {
+            border-color: #0d9488; /* Teal accent */
+            box-shadow: 0 0 20px rgba(13, 148, 136, 0.7), 0 0 5px rgba(13, 148, 136, 0.5);
+            transform: scale(1.02); /* Slight scale on highlight */
+        }
+        
+        .admin-action-btn {
+            @apply px-3 py-1 text-xs font-bold rounded-lg shadow-md transition transform hover:scale-105;
+        }
+        .text-xxs {
+            font-size: 0.65rem;
+        }
+
+        /* Dynamic Button Animation */
+        .dynamic-btn {
+            @apply transition duration-200 ease-in-out transform hover:scale-[1.01] hover:-translate-y-0.5 shadow-xl;
+        }
+
+        /* DYNAMIC BANNER ANIMATION: Pulsing Heart */
+        @keyframes pulse-heart {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+        .heart-pulse {
+            animation: pulse-heart 1.8s infinite ease-in-out;
+            filter: drop-shadow(0 0 15px rgba(239, 68, 68, 0.8));
+        }
+
+        /* Modal styling */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            width: 90%;
+            max-width: 450px;
+            transform: scale(0.8);
+            animation: modal-pop 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes modal-pop {
+            100% { transform: scale(1); }
+        }
+
+        /* LOADER STYLES */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #e6f0fa; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 150;
+        }
+
+        .spinner {
+            border: 8px solid #ddd;
+            border-top: 8px solid #1e40af; /* Blue spin */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* QUOTE SECTION ANIMATION */
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(10px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+        .quote-dynamic {
+            animation: fadeInOut 8s infinite;
+        }
+    </style>
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, serverTimestamp, orderBy, limit, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // IMPORTANT: Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
+
+        let db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        
+        // --- Role & Authentication Management ---
+        const ROLES = { DONOR: 'donor', CHARITY: 'charity', ADMIN: 'admin' };
+        const CREDENTIALS = {
+            admin: { id: 'admin', pass: 'uniadmin' },
+            bd_relief: { id: 'bd_relief', pass: 'bdrelief123' },
+            bd_education: { id: 'bd_education', pass: 'bdedu123' },
+            bd_health: { id: 'bd_health', pass: 'bdhealth123' },
+        };
+
+        let currentRole = ROLES.DONOR;
+        let authenticatedRoleId = null;
+        
+        let notifications = [];
+
+        // --- Motivational Quotes ---
+        const MOTIVATIONAL_QUOTES = [
+            "Your small help can make a big difference.",
+            "Give a little. Change a life.",
+            "Together, we can build hope.",
+            "A helping hand is the most powerful gift.",
+            "Your kindness today becomes someone’s tomorrow.",
+            "Be the reason someone smiles today.",
+            "Every donation counts. Every heart matters.",
+            "Compassion is the world’s strongest currency.",
+            "Hope grows when we share what we have.",
+            "You can’t help everyone, but everyone can help someone."
+        ];
+
+        setLogLevel('Debug');
+
+        // --- Core Firebase Initialization and Auth ---
+
+        async function initFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase config is missing. Cannot initialize Firestore.");
+                document.getElementById('initial-loader').classList.add('hidden'); // Hide on error
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                await new Promise((resolve) => {
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            userId = user.uid;
+                        } else {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                                    console.error("Custom token sign-in failed:", e);
+                                    signInAnonymously(auth);
+                                });
+                                userId = auth.currentUser.uid;
+                            } else {
+                                await signInAnonymously(auth);
+                                userId = auth.currentUser.uid;
+                            }
+                        }
+                        isAuthReady = true;
+                        document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                        resolve();
+                    });
+                });
+
+                await initializeCoreData();
+                setupListeners();
+                updateUI();
+                updateNotificationUI();
+                
+                // HIDE LOADER AFTER INITIAL SETUP IS COMPLETE
+                document.getElementById('initial-loader').classList.add('hidden');
+                startQuoteRotator(); // Start the quote rotation
+
+            } catch (e) {
+                console.error("Error during Firebase initialization:", e);
+                showNotification(`Error: Could not connect to the database.`, 'error');
+                document.getElementById('initial-loader').classList.add('hidden'); // Hide on error
+            }
+        }
+
+        // --- Quote Rotator ---
+        function updateQuote() {
+            const quoteElement = document.getElementById('motivational-quote');
+            if (!quoteElement) return;
+
+            const randomIndex = Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length);
+            const quote = MOTIVATIONAL_QUOTES[randomIndex];
+            
+            // Apply the quote, the animation handles the fading
+            quoteElement.textContent = `"${quote}"`;
+        }
+
+        function startQuoteRotator() {
+            updateQuote(); // Initial quote load
+            setInterval(updateQuote, 8000); // Rotate every 8 seconds (matching CSS animation)
+        }
+
+        // --- Firestore Path Helpers ---
+        const getCharityNeedsPath = (charityId) => doc(db, 'artifacts', appId, 'public', 'data', 'charity_needs', charityId);
+        const getCharityNeedsCollectionPath = () => collection(db, 'artifacts', appId, 'public', 'data', 'charity_needs');
+        const getAllDonationsCollectionPath = () => collection(db, 'artifacts', appId, 'public', 'data', 'all_donations');
+
+        // --- Initial Data Population (Mock Charities) ---
+
+        async function initializeCoreData() {
+            if (!db || !userId) return;
+
+            const mockCharities = [
+                { id: 'bd_relief', name: 'Bangladesh Flood Relief', location: 'Sylhet', financialNeed: 50000, foodNeed: 'Rice, oil, salt', goodsNeed: 'Shelter kits, Blankets', type: 'Disaster', totalGained: 0 },
+                { id: 'bd_education', name: 'Education for All Dhaka', location: 'Dhaka', financialNeed: 10000, foodNeed: 'No urgent need', goodsNeed: 'School Supplies, Books', type: 'Education', totalGained: 0 },
+                { id: 'bd_health', name: 'Chittagong Medical Support', location: 'Chittagong', financialNeed: 20000, foodNeed: 'Medical supplies only', goodsNeed: 'No urgent need', type: 'Health', totalGained: 0 }
+            ];
+
+            for (const charity of mockCharities) {
+                try {
+                    await setDoc(getCharityNeedsPath(charity.id), charity, { merge: true });
+                } catch (e) {
+                    console.error(`Error setting initial charity data for ${charity.id}:`, e);
+                }
+            }
+        }
+
+        // --- Real-time Listeners (onSnapshot) ---
+
+        function setupListeners() {
+            if (!isAuthReady || !db || !userId) return;
+
+            // 1. Listen for Charity Needs (Public Data)
+            onSnapshot(getCharityNeedsCollectionPath(), (snapshot) => {
+                const charities = [];
+                snapshot.forEach(doc => charities.push({ id: doc.id, ...doc.data() }));
+                window.charityNeeds = charities;
+                renderCharityNeeds(charities);
+            }, (error) => {
+                console.error("Error listening to charity needs:", error);
+                renderCharityNeeds([]); // Render empty state on error
+            });
+
+            // 2. Listen for All Donations (Public Data)
+            const allDonationsQ = query(getAllDonationsCollectionPath(), orderBy('timestamp', 'desc'), limit(50));
+            onSnapshot(allDonationsQ, (snapshot) => {
+                const allDonations = [];
+                snapshot.forEach(doc => allDonations.push({ id: doc.id, ...doc.data() }));
+                window.allDonations = allDonations;
+                // Only show history for the current donor
+                renderDonationHistory(allDonations.filter(d => d.userId === userId).slice(0, 10));
+                renderAdminView(allDonations);
+
+                if (currentRole === ROLES.CHARITY && authenticatedRoleId) {
+                    restrictCharityForm(authenticatedRoleId);
+                }
+            }, (error) => {
+                console.error("Error listening to all donations:", error);
+                renderDonationHistory([]); // Render empty state on error
+            });
+        }
+
+        // --- UI Rendering Functions ---
+
+        window.closeModal = () => {
+            document.getElementById('action-modal').classList.add('hidden');
+        };
+
+        function showModal(title, message, type) {
+            const modal = document.getElementById('action-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const modalHeader = document.getElementById('modal-header');
+
+            let headerClass = '';
+            if (type === 'success') {
+                headerClass = 'bg-green-600';
+            } else if (type === 'error') {
+                headerClass = 'bg-red-600';
+            } else {
+                headerClass = 'bg-blue-600';
+            }
+
+            modalHeader.className = `p-4 rounded-t-xl ${headerClass}`;
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+
+            // Auto-hide after 5 seconds
+            setTimeout(window.closeModal, 5000);
+        }
+
+        // Donor Submission/General Error Notification (now using modal)
+        function showNotification(message, type = 'success') {
+            showModal(type === 'success' ? 'Transaction Update' : 'System Error', message, type);
+        }
+
+        // Admin Action Confirmation Notification (now using modal)
+        function showAdminActionNotification(message, type = 'success') {
+            showModal(type === 'success' ? 'Admin Confirmation Success' : 'Admin Action Failed', message, type);
+        }
+
+
+        function updateNotificationUI() {
+            const notificationCount = document.getElementById('notification-count');
+            const notificationList = document.getElementById('notification-list');
+            
+            // Update count
+            const unreadCount = notifications.filter(n => !n.read).length;
+            notificationCount.textContent = unreadCount > 0 ? unreadCount : '';
+            notificationCount.classList.toggle('hidden', unreadCount === 0);
+
+            // Render list
+            notificationList.innerHTML = '';
+            if (notifications.length === 0) {
+                 notificationList.innerHTML = '<div class="p-3 text-sm text-gray-500 text-center">No recent confirmed donations.</div>';
+                 return;
+            }
+
+            notifications.slice(0, 10).forEach(n => {
+                const item = document.createElement('div');
+                item.className = `p-3 border-b border-gray-100 ${n.read ? 'bg-white text-gray-700' : 'bg-green-50 text-green-800 font-semibold border-l-4 border-green-400'} rounded-lg transition shadow-sm`;
+                item.innerHTML = `
+                    <p class="text-sm font-bold">${n.title}</p>
+                    <p class="text-xs">${n.message}</p>
+                    <span class="text-xxs text-gray-400">${new Date(n.timestamp).toLocaleTimeString()}</span>
+                `;
+                notificationList.appendChild(item);
+            });
+        }
+
+        window.toggleNotificationPanel = () => {
+            const panel = document.getElementById('notification-panel');
+            const panelVisible = !panel.classList.contains('hidden');
+
+            panel.classList.toggle('hidden', panelVisible);
+            
+            // Mark all as read when panel is opened
+            if (!panelVisible) {
+                notifications = notifications.map(n => ({ ...n, read: true }));
+                updateNotificationUI();
+            }
+        };
+
+        function handleMatching() {
+            // FIX: Guard clause to prevent TypeError if data hasn't loaded yet
+            if (!window.charityNeeds || window.charityNeeds.length === 0) return;
+
+            const currentType = window.currentDonationType;
+            const charityCards = document.querySelectorAll('#charity-list-donor > div');
+            
+            charityCards.forEach(card => {
+                const charityId = card.id.replace('charity-card-', '');
+                const charity = window.charityNeeds.find(c => c.id === charityId);
+
+                card.classList.remove('match-highlight');
+                
+                if (charity) {
+                    let isMatch = false;
+                    const financialNeed = charity.financialNeed > 0;
+                    const foodNeed = charity.foodNeed && charity.foodNeed.toLowerCase() !== 'no urgent need' && charity.foodNeed.toLowerCase().includes('food'); // Simple check
+                    const goodsNeed = charity.goodsNeed && charity.goodsNeed.toLowerCase() !== 'no urgent need';
+                    
+                    if (currentType === 'Financial' && financialNeed) {
+                        isMatch = true;
+                    } else if (currentType === 'Food' && foodNeed) {
+                        isMatch = true;
+                    } else if (currentType === 'Goods' && goodsNeed) {
+                        isMatch = true;
+                    }
+
+                    if (isMatch) {
+                        card.classList.add('match-highlight');
+                    }
+                }
+            });
+        }
+
+        // Must be globally accessible for HTML onclick events
+        function selectDonationType(type) {
+            window.currentDonationType = type;
+            const tabs = document.querySelectorAll('.asset-tab');
+            const forms = document.querySelectorAll('.form-section');
+            const inputs = document.querySelectorAll('.form-section input, .form-section textarea, .form-section select');
+            
+            // 1. Reset all states
+            tabs.forEach(tab => tab.classList.remove('active-tab'));
+            forms.forEach(form => form.classList.add('hidden'));
+            
+            // 2. Disable all required attributes on all inputs
+            inputs.forEach(input => {
+                input.disabled = true; 
+                input.removeAttribute('required');
+            });
+
+            // 3. Activate selected tab and form section
+            document.getElementById(`tab-${type}`).classList.add('active-tab');
+            const activeForm = document.getElementById(`form-${type}`);
+            activeForm.classList.remove('hidden');
+
+            // 4. Re-enable required inputs in the active section
+            activeForm.querySelectorAll('input, textarea, select').forEach(input => {
+                input.disabled = false;
+                // Re-add required attribute only for the primary input(s)
+                if (input.id === 'financial-amount' || input.id === 'food-items' || input.id === 'goods-desc') {
+                    input.setAttribute('required', 'required');
+                }
+            });
+
+            handleMatching();
+        };
+        window.selectDonationType = selectDonationType;
+
+
+        function renderCharityNeeds(charities) {
+            const donorList = document.getElementById('charity-list-donor');
+            const charityNeedSelect = document.getElementById('charity-need-select');
+
+            if (!donorList || !charityNeedSelect) return;
+
+            donorList.innerHTML = '';
+            if (!authenticatedRoleId || authenticatedRoleId === ROLES.ADMIN) {
+                 charityNeedSelect.innerHTML = '<option value="">Select Charity to Update</option>';
+            }
+            
+            // Display empty/waiting message if no charities are loaded
+            if (charities.length === 0) {
+                 donorList.innerHTML = '<div class="p-4 text-center text-gray-500">Waiting for real-time charity needs data...</div>';
+                 return;
+            }
+
+
+            charities.forEach(charity => {
+                const card = document.createElement('div');
+                card.id = `charity-card-${charity.id}`;
+                card.className = 'charity-card bg-white p-4 rounded-xl border-l-4 border-blue-400';
+                
+                const totalGained = charity.totalGained || 0;
+
+                card.innerHTML = `
+                    <h3 class="font-bold text-lg text-blue-800">${charity.name} <span class="text-sm font-normal text-gray-500">(${charity.location})</span></h3>
+                    <div class="mt-2 text-sm space-y-1">
+                        <p class="text-gray-700">Financial Need: <span id="financial-${charity.id}" class="font-bold text-red-600">${charity.financialNeed.toLocaleString()} BDT Target</span></p>
+                        <p class="text-gray-700">Food Need: <span id="food-${charity.id}" class="font-bold text-teal-600">${charity.foodNeed}</span></p>
+                        <p class="text-gray-700">Goods Need: <span id="goods-${charity.id}" class="font-bold text-purple-600">${charity.goodsNeed}</span></p>
+                    </div>
+                    <div class="mt-3 pt-3 border-t">
+                        <p class="text-base font-extrabold text-gray-800">Total Gained: <span class="text-green-600">${totalGained.toLocaleString()} BDT</span></p>
+                    </div>
+                `;
+                donorList.appendChild(card);
+
+                if (!authenticatedRoleId || authenticatedRoleId === ROLES.ADMIN) {
+                    const option = document.createElement('option');
+                    option.value = charity.id;
+                    option.textContent = charity.name;
+                    charityNeedSelect.appendChild(option);
+                }
+            });
+
+            handleMatching();
+        }
+
+        function renderDonationHistory(donations) {
+            const historyBody = document.getElementById('donation-history-body');
+            if (!historyBody) return;
+            historyBody.innerHTML = '';
+
+            if (donations.length === 0) {
+                historyBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No donation history found. Start giving today!</td></tr>';
+                return;
+            }
+
+            donations.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="p-3">${d.type}</td>
+                    <td class="p-3 font-medium">${d.type === 'Financial' ? `${(d.amount || 0).toLocaleString()} BDT` : d.details}</td>
+                    <td class="p-3">${d.targetCharityName || 'N/A'}</td>
+                    <td class="p-3">${new Date(d.timestamp?.seconds * 1000).toLocaleDateString()}</td>
+                    <td class="p-3">
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full ${d.status === 'Confirmed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                            ${d.status}
+                        </span>
+                    </td>
+                `;
+                historyBody.appendChild(tr);
+            });
+        }
+        
+        function renderAdminView(allDonations) {
+            const pendingBody = document.getElementById('pending-donations-body');
+            const auditBody = document.getElementById('admin-audit-body');
+
+            if (!pendingBody || !auditBody) return;
+
+            const pendingDonations = allDonations.filter(d => d.status === 'Pending Confirmation');
+            const confirmedDonations = allDonations.filter(d => d.status === 'Confirmed');
+
+            // Render Pending Donations
+            pendingBody.innerHTML = '';
+            if (pendingDonations.length === 0) {
+                pendingBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No pending donations requiring confirmation.</td></tr>';
+            } else {
+                pendingDonations.forEach(d => {
+                    const amount = d.amount ? d.amount : 0; 
+                    const isFinancial = d.type === 'Financial';
+                    const displayDetails = isFinancial ? `${amount.toLocaleString()} BDT` : d.details; 
+                    
+                    const confirmArgs = `'${d.id}', '${d.targetCharityId}', ${amount}`; 
+                    
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b hover:bg-yellow-50';
+                    tr.innerHTML = `
+                        <td class="p-3 text-xs font-mono">${d.userId.substring(0, 8)}...</td>
+                        <td class="p-3">${d.type}</td>
+                        <td class="p-3 text-xs font-medium text-wrap max-w-sm">${displayDetails}</td>
+                        <td class="p-3">${d.targetCharityName}</td>
+                        <td class="p-3">
+                            <button onclick="handleConfirmDonation(${confirmArgs})"
+                                class="admin-action-btn bg-green-600 text-white hover:bg-green-700">
+                                Confirm
+                            </button>
+                        </td>
+                    `;
+                    pendingBody.appendChild(tr);
+                });
+            }
+
+            // Render Audit History (Confirmed Donations)
+            auditBody.innerHTML = '';
+            if (confirmedDonations.length === 0) {
+                 auditBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No confirmed donations yet.</td></tr>';
+                 return;
+            }
+            confirmedDonations.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="p-3 text-xs font-mono">${d.userId.substring(0, 8)}...</td>
+                    <td class="p-3">${d.type}</td>
+                    <td class="p-3 font-medium">${d.type === 'Financial' ? `${(d.amount || 0).toLocaleString()} BDT` : d.details}</td>
+                    <td class="p-3">${d.targetCharityName}</td>
+                    <td class="p-3">${new Date(d.confirmationDate?.seconds * 1000).toLocaleDateString() || 'N/A'}</td>
+                `;
+                auditBody.appendChild(tr);
+            });
+        }
+        
+        function restrictCharityForm(charityId) {
+            const select = document.getElementById('charity-need-select');
+            
+            const authenticatedCharity = window.charityNeeds.find(c => c.id === charityId);
+
+            select.innerHTML = '';
+            if (authenticatedCharity) {
+                const option = document.createElement('option');
+                option.value = authenticatedCharity.id;
+                option.textContent = `${authenticatedCharity.name} (Your Charity)`;
+                select.appendChild(option);
+                select.value = authenticatedCharity.id;
+                select.disabled = true;
+
+                document.getElementById('charity-financial-need').value = authenticatedCharity.financialNeed || 0;
+                document.getElementById('charity-food-need').value = authenticatedCharity.foodNeed || 'No urgent need';
+                document.getElementById('charity-goods-need').value = authenticatedCharity.goodsNeed || 'No urgent need';
+
+            } else {
+                select.innerHTML = '<option value="">Error: Charity ID not found.</option>';
+                select.disabled = true;
+            }
+        }
+
+
+        function updateUI() {
+            const donorView = document.getElementById('donor-view');
+            const charityView = document.getElementById('charity-view');
+            const adminView = document.getElementById('admin-view');
+            const loginView = document.getElementById('login-view');
+            const roleToggle = document.getElementById('role-toggle');
+            const notificationBellContainer = document.getElementById('notification-bell-container');
+
+            // Hide all views initially
+            donorView.classList.add('hidden');
+            charityView.classList.add('hidden');
+            adminView.classList.add('hidden');
+            loginView.classList.add('hidden');
+            document.getElementById('logged-in-role').textContent = '';
+            notificationBellContainer.classList.add('hidden'); // Hide bell by default
+
+            if (currentRole === ROLES.DONOR) {
+                donorView.classList.remove('hidden');
+                notificationBellContainer.classList.remove('hidden'); // Show bell only for donor
+                roleToggle.textContent = 'Switch to Staff/Admin Login';
+                roleToggle.className = 'dynamic-btn px-4 py-2 text-sm bg-gray-700 text-white rounded-lg hover:bg-gray-800';
+            } else if (currentRole === ROLES.CHARITY || currentRole === ROLES.ADMIN) {
+                if (authenticatedRoleId) {
+                    document.getElementById('logged-in-role').textContent = `Logged in as: ${authenticatedRoleId.toUpperCase()}`;
+                    roleToggle.textContent = 'Switch to Donor View (Logout)';
+                    
+                    if (currentRole === ROLES.CHARITY) {
+                        charityView.classList.remove('hidden');
+                        restrictCharityForm(authenticatedRoleId);
+                        roleToggle.className = 'dynamic-btn px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700';
+                    } else if (currentRole === ROLES.ADMIN) {
+                        adminView.classList.remove('hidden');
+                        roleToggle.className = 'dynamic-btn px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800';
+                    }
+                } else {
+                    loginView.classList.remove('hidden');
+                    roleToggle.textContent = 'Switch to Donor View';
+                    roleToggle.className = 'dynamic-btn px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700';
+                }
+            }
+        }
+
+        function handleLogin() {
+            const user = document.getElementById('login-id').value.trim();
+            const pass = document.getElementById('login-pass').value.trim();
+
+            const credentialsToVerify = CREDENTIALS[user];
+            
+            if (credentialsToVerify && credentialsToVerify.pass === pass) {
+                authenticatedRoleId = user;
+                if (user === 'admin') {
+                    currentRole = ROLES.ADMIN;
+                } else {
+                    currentRole = ROLES.CHARITY;
+                }
+                showNotification(`Login successful as ${user.toUpperCase()}!`, 'success');
+            } else {
+                authenticatedRoleId = null;
+                showNotification('Invalid ID or Password.', 'error');
+            }
+
+            updateUI();
+        };
+        window.handleLogin = handleLogin;
+
+        function handleDonationSubmit() {
+            if (!isAuthReady || !db || !userId) {
+                showNotification('Authentication not complete. Please wait.', 'error');
+                return;
+            }
+
+            const type = window.currentDonationType;
+            let data = {};
+            const form = document.getElementById('donation-form');
+            const targetCharityId = form.querySelector('[name="targetCharity"]').value;
+
+            if (!targetCharityId) {
+                showNotification('Please select a target charity.', 'error');
+                return;
+            }
+
+            const targetCharity = window.charityNeeds.find(c => c.id === targetCharityId);
+
+            if (type === 'Financial') {
+                const amount = document.getElementById('financial-amount').value;
+                data = { amount: parseFloat(amount), details: 'Financial Donation' };
+            } else if (type === 'Food') {
+                const items = document.getElementById('food-items').value;
+                const expiration = document.getElementById('food-exp').value;
+                data = { details: `Items: ${items}, Exp: ${expiration}`, items: items, amount: 0 };
+            } else if (type === 'Goods') {
+                const description = document.getElementById('goods-desc').value;
+                const condition = document.getElementById('goods-cond').value;
+                data = { details: `Desc: ${description}, Cond: ${condition}`, items: description, amount: 0 };
+            } else {
+                showNotification('Please select a valid donation type.', 'error');
+                return;
+            }
+
+            try {
+                // All necessary checks are passed, attempt to log donation
+                setDoc(doc(getAllDonationsCollectionPath()), {
+                    type,
+                    ...data,
+                    targetCharityId: targetCharityId,
+                    targetCharityName: targetCharity?.name || 'Unknown',
+                    userId: userId,
+                    timestamp: serverTimestamp(),
+                    status: 'Pending Confirmation'
+                });
+
+                form.reset();
+                
+                // Re-enable all inputs after form reset to ensure selectDonationType works properly next time
+                document.querySelectorAll('.form-section input, .form-section textarea, .form-section select').forEach(input => input.disabled = false);
+                
+                // IMPORTANT: Re-select the type to ensure the correct inputs are disabled again
+                window.selectDonationType(type);
+
+                // Confirmation message after submission
+                showNotification(`Your ${type} donation to ${targetCharity?.name || 'Unknown'} has been successfully submitted and is awaiting Admin confirmation!`, 'success');
+
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showNotification('Failed to submit donation. Please check console.', 'error');
+            }
+        };
+        window.handleDonationSubmit = handleDonationSubmit;
+
+        function handleNeedsUpdate() {
+            if (!isAuthReady || !db || !userId) {
+                showNotification('Authentication not complete.', 'error');
+                return;
+            }
+            if (currentRole !== ROLES.CHARITY || authenticatedRoleId === ROLES.ADMIN) {
+                showNotification('Access Denied. Only authorized Charity Partners can update needs.', 'error');
+                return;
+            }
+
+            const charityId = authenticatedRoleId;
+            const financial = document.getElementById('charity-financial-need').value;
+            const food = document.getElementById('charity-food-need').value;
+            const goods = document.getElementById('charity-goods-need').value;
+
+            if (!charityId) {
+                 showNotification('Error: No authenticated Charity ID.', 'error');
+                 return;
+            }
+
+            try {
+                updateDoc(getCharityNeedsPath(charityId), {
+                    financialNeed: parseInt(financial) || 0,
+                    foodNeed: food || 'No urgent need',
+                    goodsNeed: goods || 'No urgent need'
+                });
+
+                showNotification(`Charity needs for ${charityId} updated successfully.`, 'success');
+            } catch (e) {
+                console.error("Error updating charity needs: ", e);
+                showNotification('Failed to update needs. Please check console.', 'error');
+            }
+        };
+        window.handleNeedsUpdate = handleNeedsUpdate;
+
+        async function handleConfirmDonation(donationId, charityId, amount) {
+            if (!isAuthReady || !db || currentRole !== ROLES.ADMIN) {
+                showAdminActionNotification('Authentication or Role Error. Only Admin can confirm donations.', 'error');
+                return;
+            }
+            if (!donationId || !charityId) {
+                 showAdminActionNotification('Error: Missing donation or charity ID.', 'error');
+                 return;
+            }
+
+            try {
+                // 1. Update Donation Status
+                await updateDoc(doc(getAllDonationsCollectionPath(), donationId), {
+                    status: 'Confirmed',
+                    confirmedBy: userId,
+                    confirmationDate: serverTimestamp()
+                });
+                
+                // 2. Update Charity Total Gained (Only for Financial Donations where amount > 0)
+                if (amount > 0) {
+                    const charityRef = getCharityNeedsPath(charityId);
+                    const charityDoc = await getDoc(charityRef); 
+                    let currentTotalGained = 0;
+                    if (charityDoc.exists()) {
+                        currentTotalGained = parseInt(charityDoc.data().totalGained) || 0; 
+                    }
+
+                    await updateDoc(charityRef, {
+                        totalGained: currentTotalGained + amount
+                    });
+                }
+
+                // 3. NEW: Add a notification for successful confirmation
+                const donation = window.allDonations.find(d => d.id === donationId);
+                if (donation) {
+                     const message = `Donor ${donation.userId.substring(0, 5)}...: ${donation.type} donation to ${donation.targetCharityName} was processed.`;
+                     // Notifications are pushed to the array for the Donor's view
+                     notifications.unshift({
+                         title: `✅ Donation Confirmed!`,
+                         message: message,
+                         timestamp: Date.now(),
+                         read: false 
+                     });
+                     updateNotificationUI();
+                }
+
+                showAdminActionNotification(`Donation ${donationId.substring(0, 5)}... confirmed successfully!`, 'success');
+
+            } catch (e) {
+                console.error("Error confirming donation: ", e);
+                showAdminActionNotification('Failed to confirm donation due to database error.', 'error');
+            }
+        };
+        window.handleConfirmDonation = handleConfirmDonation;
+
+
+        function toggleRole() {
+            if (currentRole === ROLES.DONOR) {
+                currentRole = ROLES.CHARITY; // Switching to Staff portal (which presents login)
+            } else {
+                currentRole = ROLES.DONOR;
+            }
+            authenticatedRoleId = null;
+            updateUI();
+        };
+        window.toggleRole = toggleRole;
+        
+        // --- NEW INITIALIZATION FUNCTION ---
+        const setupApp = () => { 
+            window.currentDonationType = 'Financial';
+            
+            // Initialize forms and select the default type
+            document.querySelectorAll('.form-section input, .form-section textarea, .form-section select').forEach(input => input.disabled = false);
+            window.selectDonationType('Financial');
+
+            initFirebase();
+            
+            // Setup Event Listeners
+            document.getElementById('role-toggle').addEventListener('click', window.toggleRole);
+            document.getElementById('notification-bell').addEventListener('click', window.toggleNotificationPanel);
+            
+            document.getElementById('donation-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                // Form submission relies on HTML5 validation for *enabled* required fields.
+                if (e.target.checkValidity()) {
+                    window.handleDonationSubmit();
+                } else {
+                    // This handles native browser error messages for missing required fields
+                    // The modal will fire on the 'invalid' event in modern browsers anyway, but this is a fallback
+                    showNotification('Please fill out all required donation fields.', 'error');
+                }
+            });
+            document.getElementById('needs-update-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                window.handleNeedsUpdate();
+            });
+            document.getElementById('login-form').addEventListener('submit', (e) => {
+                 e.preventDefault();
+                 window.handleLogin();
+            });
+            document.getElementById('modal-close-btn').addEventListener('click', window.closeModal);
+        };
+        
+        // Ensure initial setup runs once all dependencies are loaded
+        document.addEventListener('DOMContentLoaded', setupApp);
+    </script>
+</head>
+<body class="min-h-screen p-0">
+
+    <!-- NEW: Initial Loader Screen -->
+    <div id="initial-loader" class="loader-overlay">
+        <div class="spinner"></div>
+        <p class="mt-4 text-xl font-semibold text-blue-800 animate-pulse">Connecting to UniDonate System...</p>
+        <p class="text-sm text-gray-600 mt-2">Loading real-time data from Bangladesh charities.</p>
+    </div>
+    <!-- END LOADER -->
+
+    <div class="p-4 md:p-8">
+        <header class="mb-6 p-3 md:p-4 bg-white rounded-xl shadow-2xl flex flex-wrap justify-between items-center relative">
+            <div class="flex items-center space-x-3 sm:space-x-4 w-full sm:w-auto mb-2 sm:mb-0">
+                <!-- DYNAMIC BANNER ANIMATION: Pulsing Heart -->
+                <div class="w-8 h-8 sm:w-10 sm:h-10 relative">
+                    <svg class="heart-pulse w-full h-full text-red-600" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                </div>
+                <div>
+                    <!-- RESPONSIVENESS: Text size adjusted for mobile -->
+                    <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-blue-900">UniDonate Platform</h1>
+                    <p class="text-xs sm:text-sm text-gray-600">Unified Charity Donation & Management System</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto justify-end">
+                <!-- NOTIFICATION SCOPE: Container controlled by JS (only visible in Donor view) -->
+                <div id="notification-bell-container" class="hidden">
+                    <button id="notification-bell" class="relative p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition" title="Confirmed Donations">
+                        <svg class="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v2a3 3 0 11-6 0v-2m6 0H9"></path></svg>
+                        <span id="notification-count" class="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full hidden"></span>
+                    </button>
+                </div>
+
+                <div class="flex flex-col items-end space-y-1 sm:space-y-2">
+                    <button id="role-toggle" class="dynamic-btn px-2 py-1 text-xs md:px-4 md:py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800"
+                        title="Cycles between Donor View and Staff/Admin Login.">
+                        Switch to Staff/Admin Login
+                    </button>
+                    <p id="logged-in-role" class="text-sm font-semibold text-gray-700"></p>
+                    <p id="user-id-display" class="text-xs text-gray-400">User ID: Loading...</p>
+                </div>
+            </div>
+
+            <!-- NEW: Notification Panel -->
+            <div id="notification-panel" class="hidden absolute right-0 mt-2 top-full w-72 md:w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                <div class="p-3 bg-blue-50 border-b font-bold text-blue-800 rounded-t-lg">Recent Confirmations</div>
+                <div id="notification-list" class="max-h-60 overflow-y-auto space-y-1 p-2">
+                    <!-- Notifications populated by JavaScript -->
+                </div>
+                <div class="p-2 text-center text-xs text-gray-400 border-t">Click a notification to mark as read.</div>
+            </div>
+        </header>
+
+        <!-- --- STAFF/ADMIN LOGIN VIEW --- -->
+        <div id="login-view" class="hidden max-w-sm md:max-w-md mx-auto bg-white p-6 md:p-8 rounded-xl shadow-2xl border-l-4 border-red-600">
+            <h2 class="text-2xl font-bold text-red-700 mb-4">Staff / Admin Login</h2>
+            <p class="text-sm text-gray-600 mb-6">Enter credentials to access the Admin Portal or your specific Charity Dashboard.</p>
+            <p class="text-xs font-semibold mb-2 p-2 bg-gray-100 rounded-lg border border-gray-200">
+                Admin: ID: **admin**, Pass: **uniadmin**<br>
+                Charity Example: ID: **bd\_relief**, Pass: **bdrelief123**
+            </p>
+
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label for="login-id" class="block text-sm font-medium text-gray-700">User ID (Charity ID or 'admin')</label>
+                    <input type="text" id="login-id" placeholder="e.g., admin or bd_relief" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+                </div>
+                <div>
+                    <label for="login-pass" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="login-pass" placeholder="password" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+                </div>
+                <button type="submit" class="dynamic-btn w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700">
+                    Log In
+                </button>
+            </form>
+        </div>
+
+        <!-- --- DONOR VIEW --- -->
+        <div id="donor-view" class="hidden space-y-8">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">Donor Dashboard - Your Contribution</h2>
+            
+            <!-- NEW QUOTE SECTION -->
+            <div class="relative bg-white p-5 rounded-xl shadow-xl border-l-4 border-teal-500 overflow-hidden">
+                <p id="motivational-quote" class="quote-dynamic text-lg italic text-center font-semibold text-gray-700 transition duration-1000">
+                    <!-- Quote loaded by JavaScript -->
+                </p>
+            </div>
+
+            <!-- RESPONSIVENESS: Grid columns stacked on small screens -->
+            <div class="grid lg:grid-cols-2 gap-8">
+                <!-- 1. Needs-Based Matching & Total Gained -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl">
+                    <h3 class="text-xl font-bold text-blue-700 mb-4 flex items-center">
+                        Charity Needs & Financial Transparency
+                        <svg class="w-5 h-5 ml-2 text-red-500 heart-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </h3>
+                    <p class="text-sm text-gray-500 mb-4">Select a donation type below to see real-time matching highlights on the list.</p>
+                    <div id="charity-list-donor" class="scroll-container space-y-4 pr-1">
+                        <!-- Charities will be loaded here by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- 2. Multi-Asset Contribution Form -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl">
+                    <h3 class="text-xl font-bold text-blue-700 mb-4">Make a Contribution</h3>
+                    <form id="donation-form" class="space-y-4">
+                        <div class="flex space-x-2 p-1 bg-gray-100 rounded-xl shadow-inner">
+                            <button type="button" id="tab-Financial" onclick="selectDonationType('Financial')" class="asset-tab flex-1 py-2 text-sm font-semibold rounded-xl transition shadow-md duration-300">Financial</button>
+                            <button type="button" id="tab-Food" onclick="selectDonationType('Food')" class="asset-tab flex-1 py-2 text-sm font-semibold rounded-xl transition shadow-md duration-300">Food Items</button>
+                            <button type="button" id="tab-Goods" onclick="selectDonationType('Goods')" class="asset-tab flex-1 py-2 text-sm font-semibold rounded-xl transition shadow-md duration-300">Clothing/Supplies</button>
+                        </div>
+
+                        <div class="p-3 border-t-2 border-gray-200 pt-6">
+                            <label for="targetCharity" class="block text-sm font-medium text-gray-700 mb-1">Target Charity</label>
+                            <select id="targetCharity" name="targetCharity" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm">
+                                <option value="">Select a Charity Partner</option>
+                                <option value="bd_relief">Bangladesh Flood Relief (Sylhet)</option>
+                                <option value="bd_education">Education for All (Dhaka)</option>
+                                <option value="bd_health">Chittagong Medical Support</option>
+                            </select>
+                        </div>
+
+                        <!-- Form Sections... -->
+                        <div id="form-Financial" class="form-section hidden space-y-4">
+                            <label for="financial-amount" class="block text-lg font-bold text-blue-800">Financial Donation (BDT)</label>
+                            <input type="number" id="financial-amount" name="financial-amount" placeholder="e.g., 500 BDT" required class="w-full p-3 border-2 border-blue-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-inner">
+                            <p class="text-xs text-gray-500">Your donation will be logged as pending until Admin confirmation.</p>
+                        </div>
+                        <div id="form-Food" class="form-section hidden space-y-4">
+                            <label for="food-items" class="block text-lg font-bold text-teal-700">Food Item Types & Quantity</label>
+                            <textarea id="food-items" name="food-items" rows="3" placeholder="e.g., 5kg Rice, 2L Oil, 10 Cans of Beans" required class="w-full p-3 border-2 border-teal-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 shadow-inner"></textarea>
+                            <label for="food-exp" class="block text-sm font-medium text-gray-700">Earliest Expiration Date</label>
+                            <input type="date" id="food-exp" name="food-exp" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm">
+                        </div>
+                        <div id="form-Goods" class="form-section hidden space-y-4">
+                            <label for="goods-desc" class="block text-lg font-bold text-purple-700">Non-Perishable Goods Description</label>
+                            <textarea id="goods-desc" name="goods-desc" rows="3" placeholder="e.g., 10 Winter Coats (Size L), 5 boxes of children's books" required class="w-full p-3 border-2 border-purple-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 shadow-inner"></textarea>
+                            <label for="goods-cond" class="block text-sm font-medium text-gray-700">Condition</label>
+                            <select id="goods-cond" name="goods-cond" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm">
+                                <option value="New">New</option>
+                                <option value="Gently Used">Gently Used</option>
+                                <option value="Used">Used</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="dynamic-btn w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 mt-6">
+                            Confirm & Log Donation (Awaits Admin Approval)
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 3. Donation Tracking & Audit -->
+            <div class="mt-8 bg-white p-6 rounded-xl shadow-2xl">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">My Donation Tracking & Audit</h3>
+                <div class="scroll-container">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recipient</th>
+                                <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status (Admin Confirmed)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="donation-history-body" class="bg-white divide-y divide-gray-200">
+                            <!-- History loaded by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- --- END DONOR VIEW --- -->
+
+        <!-- --- CHARITY VIEW (Requires Login) --- -->
+        <div id="charity-view" class="hidden space-y-8">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">Charity Partner Dashboard - Real-time Needs Management</h2>
+
+            <!-- RESPONSIVENESS: Grid columns stacked on small screens -->
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Real-time Needs Management Form (Restricted) -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl border-2 border-teal-500">
+                    <h3 class="text-xl font-bold text-teal-700 mb-4">Update Urgent Needs List</h3>
+                    <form id="needs-update-form" class="space-y-4">
+                        <label for="charity-need-select" class="block text-sm font-medium text-gray-700">Selected Charity (Your Profile)</label>
+                        <select id="charity-need-select" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 shadow-sm" disabled>
+                            <option value="">Loading...</option>
+                        </select>
+
+                        <label for="charity-financial-need" class="block text-sm font-medium text-gray-700">Financial Goal (BDT)</label>
+                        <input type="number" id="charity-financial-need" placeholder="e.g., 10000 (Target BDT)" value="0" min="0" required class="w-full p-2 border border-gray-300 rounded-lg shadow-inner">
+
+                        <label for="charity-food-need" class="block text-sm font-medium text-gray-700">Urgent Food Need</label>
+                        <input type="text" id="charity-food-need" placeholder="e.g., Rice, oil, dry milk" value="No urgent need" required class="w-full p-2 border border-gray-300 rounded-lg shadow-inner">
+
+                        <label for="charity-goods-need" class="block text-sm font-medium text-gray-700">Urgent Goods Need</label>
+                        <input type="text" id="charity-goods-need" placeholder="e.g., Winter coats, first aid kits" value="No urgent need" required class="w-full p-2 border border-gray-300 rounded-lg shadow-inner">
+
+                        <button type="submit" class="dynamic-btn w-full py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 mt-6">
+                            Publish Needs Update
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Inventory Intake Control (Simulated View) -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Logistics & Intake Control</h3>
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-300 space-y-2 shadow-inner">
+                        <p class="font-semibold text-yellow-800">Incoming Donations (Simulated)</p>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            <li class="p-2 bg-yellow-100 rounded">Donor <span class="font-mono text-xs text-yellow-600">[A93B...]</span> - 5kg Rice (Pickup Scheduled: Tomorrow)</li>
+                            <li class="p-2 bg-yellow-100 rounded">Donor <span class="font-mono text-xs text-yellow-600">[C2E1...]</span> - 2000 BDT (Financial)</li>
+                            <li class="p-2 bg-yellow-100 rounded">Donor <span class="font-mono text-xs text-yellow-600">[F6D8...]</span> - Winter Coats (Awaiting Drop-off)</li>
+                        </ul>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">Logistics scheduling is simulated here. Admin confirms overall donation delivery.</p>
+                </div>
+            </div>
+        </div>
+        <!-- --- END CHARITY VIEW --- -->
+
+        <!-- --- ADMIN VIEW (Requires Login as 'admin') --- -->
+        <div id="admin-view" class="hidden space-y-8">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-4 text-red-700">Admin Portal - Donation Audit & Confirmation</h2>
+
+            <div class="grid lg:grid-cols-1 gap-8">
+                <!-- Pending Donations for Confirmation -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl border-2 border-red-500">
+                    <h3 class="text-xl font-bold text-red-700 mb-4 flex items-center">
+                        Pending Donations & Confirmation Queue
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">Use the "Confirm" button to finalize the donation status and update charity financial totals.</p>
+                    
+                    
+                    <div class="scroll-container shadow-inner border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-yellow-200 sticky top-0">
+                                <tr>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Donor ID</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Details / Amount</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Target Charity</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-donations-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Pending list loaded by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Audit Trail (Confirmed Donations History) -->
+                <div class="bg-white p-6 rounded-xl shadow-2xl">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Full Donation Audit Trail (Confirmed)</h3>
+                    <div class="scroll-container shadow-inner border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-200 sticky top-0">
+                                <tr>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Donor ID</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Type</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Details / Amount</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Recipient</th>
+                                    <th class="p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Date Confirmed</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-audit-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Audit list loaded by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- --- END ADMIN VIEW --- -->
+        
+        <!-- UNIVERSAL ACTION MODAL POPUP -->
+        <div id="action-modal" class="modal-overlay hidden">
+            <div class="modal-content bg-white rounded-xl shadow-2xl overflow-hidden">
+                <div id="modal-header" class="p-4 rounded-t-xl text-white font-extrabold text-xl flex justify-between items-center">
+                    <span id="modal-title">Action Title</span>
+                    <button id="modal-close-btn" class="text-white hover:text-gray-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p id="modal-message" class="text-gray-700 mb-4"></p>
+                    <button onclick="window.closeModal()" class="dynamic-btn w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- END MODAL -->
+
+        <footer>
+            <div class="mt-12 text-center text-sm text-gray-500 pt-4 border-t border-gray-300">
+                <p class="mt-1 text-xs font-extrabold text-gray-700">Created by Prof. Dr. Md. Abul Kashem Mia, Vice Chancellor, UIU</p>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
