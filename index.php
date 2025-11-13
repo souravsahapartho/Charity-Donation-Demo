@@ -142,6 +142,12 @@
 
             <!-- Donor View -->
             <div id="donor-view">
+                
+                <!-- NEW: Global Statistics Banner (Injected by JS) -->
+                <div id="stats-banner" class="mb-8">
+                    <!-- Statistics will be injected here by renderStats() -->
+                </div>
+
                 <div class="grid lg:grid-cols-3 gap-8 mb-8">
                     <!-- Column 1: Quotes -->
                     <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border-t-4 border-teal-500 flex flex-col justify-center">
@@ -155,7 +161,7 @@
                         </div>
                     </div>
 
-                    <!-- Column 2 & 3: Donation Input Form & Charity Needs -->
+                    <!-- Column 2 & 3: Donation Input Form -->
                     <div class="lg:col-span-2">
                         <!-- Donation Form -->
                         <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-blue-500">
@@ -163,14 +169,14 @@
                             
                             <form id="donation-form" onsubmit="window.handleDonationSubmit(event)">
                                 
-                                <!-- NEW: Charity Selection Dropdown -->
+                                <!-- Charity Selection Dropdown -->
                                 <div class="mb-6">
                                     <label for="target-charity-id" class="block text-sm font-medium text-gray-700 mb-1">Select Charity Partner</label>
                                     <select name="targetCharityId" id="target-charity-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 transition-shadow" required>
                                         <!-- Options populated by JS -->
                                     </select>
                                 </div>
-                                <!-- END NEW DROPDOWN -->
+                                <!-- END DROPDOWN -->
 
                                 <div class="flex space-x-2 border-b mb-6">
                                     <button type="button" class="tab-button px-4 py-2 text-sm font-medium rounded-t-lg transition-colors" data-type="financial" onclick="window.selectDonationType('financial')">Financial</button>
@@ -374,41 +380,32 @@
     <footer class="bg-gray-100 py-4 mt-8 shadow-inner">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-600">
             <p>&copy; 2024 UniDonate Platform. All Rights Reserved.</p>
-            <p class="mt-1 font-semibold text-gray-700">Created by Lionel Messi, CSE Undergrad, UIU</p>
+            <p class="mt-1 font-semibold text-gray-700">Powered by PHP & MySQL (via XAMPP)</p>
         </div>
     </footer>
 
-    <!-- JavaScript and Firebase Module -->
-    <script type="module">
-        // --- Firebase Imports ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, query, serverTimestamp, updateDoc, getDocs, where, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // IMPORTANT: These global variables are replaced with safe, static defaults 
-        // to ensure the app runs on GitHub/Netlify without API key errors.
-        const APP_ID = 'uni-donate-github-prod'; 
-        const FIREBASE_CONFIG = {
-            apiKey: "AIzaSy_MOCK_API_KEY_FOR_GITHUB_TESTING", // THIS IS THE MOCK KEY
-            authDomain: "mock-auth-domain.firebaseapp.com",
-            projectId: "mock-project-id",
-            storageBucket: "mock-storage-bucket.appspot.com",
-            messagingSenderId: "1234567890",
-            appId: "1:234567890:web:mockappidf12345"
-        }; 
-        const INITIAL_AUTH_TOKEN = null; 
-
-        // Set logging for debugging purposes
-        setLogLevel('debug'); 
-
-        let db, auth;
-        let currentUserId = null;
+    <!-- JavaScript Module (PHP/MySQL API Integration) -->
+    <script>
+        
         let userRole = 'donor'; // 'donor', 'charity', 'admin'
-
-        // Global data stores (used by matching logic)
+        let currentUserId = 'anonymous-' + Math.random().toString(36).substring(2, 9); // Anonymous user ID
+        
+        // Global data stores (populated by API calls)
         window.charityNeeds = [];
+        window.donorDonations = [];
+        window.pendingDonations = [];
+        window.auditHistory = [];
         window.lastNotificationCount = 0;
+
+        // Mock Charity Data for local login checking (should ideally be fetched/checked by PHP)
+        const MOCK_CHARITIES = [
+            { id: 'brac', name: 'BRAC', region: 'Nationwide', needs: 'Microfinance aid, $100000 for education, Sanitary pads', password: 'brac123' },
+            { id: 'bidyanondo', name: 'Bidyanondo Foundation', region: 'Dhaka', needs: 'School supplies, Rice bags, Volunteer funding', password: 'bidyanondo123' },
+            { id: 'as_sunnah', name: 'As-Sunnah Foundation', region: 'Chittagong', needs: 'Winter blankets, Disaster relief funds, Medicine', password: 'assunnah123' },
+            { id: 'jaago', name: 'Jaago Foundation', region: 'Dhaka', needs: 'Laptops, Children\'s books, Teacher salaries', password: 'jaago123' },
+            { id: 'mastul', name: 'Mastul Foundation', region: 'Rajshahi', needs: 'Orphanage support, Food packages, Clothing', password: 'mastul123' },
+        ];
+
 
         // Quotes for motivation
         const motivationQuotes = [
@@ -424,249 +421,55 @@
             "You can’t help everyone, but everyone can help someone."
         ];
 
-        // Mock Charity Data for initial setup (Updated with real BD foundations)
-        const MOCK_CHARITIES = [
-            { id: 'brac', name: 'BRAC', totalGained: 250000, region: 'Nationwide', needs: 'Microfinance aid, $100000 for education, Sanitary pads', password: 'brac123' },
-            { id: 'bidyanondo', name: 'Bidyanondo Foundation', totalGained: 180000, region: 'Dhaka', needs: 'School supplies, Rice bags, Volunteer funding', password: 'bidyanondo123' },
-            { id: 'as_sunnah', name: 'As-Sunnah Foundation', totalGained: 150000, region: 'Chittagong', needs: 'Winter blankets, Disaster relief funds, Medicine', password: 'assunnah123' },
-            { id: 'jaago', name: 'Jaago Foundation', totalGained: 120000, region: 'Dhaka', needs: 'Laptops, Children\'s books, Teacher salaries', password: 'jaago123' },
-            { id: 'mastul', name: 'Mastul Foundation', totalGained: 95000, region: 'Rajshahi', needs: 'Orphanage support, Food packages, Clothing', password: 'mastul123' },
-        ];
 
-        // --- Firebase Initialization and Auth ---
+        // --- API Calls and Data Submission ---
 
         /**
-         * Initializes Firebase app or bypasses to mock data if API key is invalid.
+         * Renders the global statistics banner.
          */
-        const initializeFirebase = async () => {
-            const loader = document.getElementById('app-loader');
+        const renderStats = (stats) => {
+            const container = document.getElementById('stats-banner');
+            if (!container) return;
 
-            // CRITICAL FIX: Bypass Firebase API key error when using mock key
-            if (FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
-                console.warn("Detected mock API key. Bypassing Firebase initialization and using local mock data.");
-                await setupMockData(); 
-                loader.classList.add('hidden');
-                document.getElementById('app-content').classList.remove('hidden');
-                window.renderCharityNeeds(window.charityNeeds);
-                window.selectDonationType('financial');
-                window.updateRoleView('donor');
-                return;
-            }
-
-            try {
-                const app = initializeApp(FIREBASE_CONFIG);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                // Attempt sign-in
-                if (INITIAL_AUTH_TOKEN) {
-                    await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        currentUserId = user.uid;
-                        console.log("Auth success. Current User ID:", currentUserId);
-                        startRealTimeListeners();
-                    } else {
-                        console.log("User signed out or anonymous.");
-                        currentUserId = null;
-                    }
-                    loader.classList.add('hidden');
-                    document.getElementById('app-content').classList.remove('hidden');
-                    window.selectDonationType('financial');
-                    window.updateRoleView(userRole); // Initial render
-                });
-
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                // Fallback to mock data if real-time connection fails unexpectedly (e.g., wrong config in production)
-                if (!window.charityNeeds || window.charityNeeds.length === 0) {
-                     await setupMockData();
-                }
-                loader.classList.add('hidden');
-                document.getElementById('app-content').classList.remove('hidden');
-                showModal('error', 'Database Error', 'Could not connect to the database. Running in local mock mode.');
-            }
-        };
-
-        // --- Mock Data Setup (Used when Firebase fails/bypassed) ---
-
-        const setupMockData = async () => {
-            console.warn("Using MOCK charity data and NO real-time services. Authentication and transactions will not be persistent.");
+            // Simple check to prevent errors if stats are missing
+            const totalDonations = parseFloat(stats.total_donations) || 0;
+            const totalDonors = parseInt(stats.total_donors) || 0;
+            const totalContributions = parseInt(stats.total_contributions) || 0;
             
-            // Populate mock data stores
-            window.charityNeeds = MOCK_CHARITIES.map(c => ({...c, totalGained: c.totalGained || 0}));
-            window.donorDonations = []; 
-            window.pendingDonations = []; 
-            window.auditHistory = []; 
-            
-            // Mock Confirmation Function (Admin Approval Logic)
-            window.handleConfirmDonation = (id, type, amount, charityId) => {
-                const pendingIndex = window.pendingDonations.findIndex(d => d.id === id);
-                if (pendingIndex > -1) {
-                    const donation = window.pendingDonations.splice(pendingIndex, 1)[0];
-                    // Update donor's local history
-                    const donorDonation = window.donorDonations.find(d => d.id === id);
-                    if (donorDonation) donorDonation.status = 'Confirmed';
-
-                    window.auditHistory.push(donation);
-                    
-                    if (type === 'financial') {
-                        const charity = window.charityNeeds.find(c => c.id === charityId);
-                        if (charity) {
-                            charity.totalGained += amount;
-                        }
-                    }
-                    
-                    // FIX: Remove "Mock" from confirmation message
-                    window.showModal('success', 'Confirmation Success', `Donation ID ${id} confirmed and logged by Admin.`);
-                    window.renderPendingDonations(window.pendingDonations);
-                    window.renderAuditHistory(window.auditHistory);
-                    window.renderCharityNeeds(window.charityNeeds);
-                    window.renderMyDonations(window.donorDonations);
-                }
-            };
-
-            // Mock Submission function
-            window.handleDonationSubmit = (event) => {
-                event.preventDefault();
-                const form = event.target;
-                const formData = new FormData(form);
-                const type = formData.get('donationType');
-                // Target charity is now read directly from the dropdown
-                const targetCharityId = formData.get('targetCharityId');
-                
-                let data = {};
-                let amount = 0;
-
-                if (type === 'financial') {
-                    amount = parseFloat(formData.get('amount'));
-                    data = { amount: amount };
-                } else if (type === 'food' || type === 'goods') {
-                    data = { items: formData.get('items').trim() };
-                    // FIX: Ensure amount is 0 for non-financial items
-                    amount = 0; 
-                }
-
-                const newId = crypto.randomUUID();
-                const newDonation = {
-                    id: newId,
-                    donorId: 'mock-donor',
-                    charityId: targetCharityId,
-                    type: type,
-                    data: data,
-                    amount: amount,
-                    status: 'Pending Confirmation',
-                    timestamp: new Date(),
-                    notified: false 
-                };
-
-                window.pendingDonations.push(newDonation);
-                window.donorDonations.push(newDonation);
-                form.reset();
-                window.selectDonationType('financial');
-                
-                // FIX: Remove "Mock" from donation logged message
-                window.showModal('success', 'Donation Logged', `Your ${type} donation has been logged and is awaiting Admin confirmation.`);
-                
-                window.renderPendingDonations(window.pendingDonations);
-                window.renderMyDonations(window.donorDonations);
-            };
-
-            window.handleUpdateNeeds = (event, charityId) => {
-                event.preventDefault();
-                const needs = document.getElementById('needs-update').value;
-                const charity = window.charityNeeds.find(c => c.id === charityId);
-                if (charity) {
-                    charity.needs = needs;
-                    window.showModal('success', 'Update Successful (Mock)', `Needs for ${charityId} updated locally.`);
-                    window.renderCharityNeeds(window.charityNeeds);
-                }
-            };
+            container.innerHTML = `
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div class="bg-green-100 p-4 rounded-xl shadow-md border-b-4 border-green-500">
+                        <p class="text-3xl font-extrabold text-green-700">BDT ${(totalDonations / 1000).toFixed(1)}K</p>
+                        <p class="text-sm text-green-600 font-semibold">Total Funds Confirmed</p>
+                    </div>
+                    <div class="bg-blue-100 p-4 rounded-xl shadow-md border-b-4 border-blue-500">
+                        <p class="text-3xl font-extrabold text-blue-700">${totalDonors.toLocaleString()}</p>
+                        <p class="text-sm text-blue-600 font-semibold">Total Unique Donors</p>
+                    </div>
+                    <div class="bg-yellow-100 p-4 rounded-xl shadow-md border-b-4 border-yellow-500">
+                        <p class="text-3xl font-extrabold text-yellow-700">${totalContributions.toLocaleString()}</p>
+                        <p class="text-sm text-yellow-600 font-semibold">Total Contributions</p>
+                    </div>
+                </div>
+            `;
         };
 
-
-        // --- Firestore Paths ---
-
-        const charityNeedsPath = () => collection(db, `/artifacts/${APP_ID}/public/data/charity_needs`);
-        const pendingDonationsPath = () => collection(db, `/artifacts/${APP_ID}/public/data/pending_donations`);
-        const auditHistoryPath = () => collection(db, `/artifacts/${APP_ID}/public/data/audit_history`);
-        const myDonationsPath = (userId) => collection(db, `/artifacts/${APP_ID}/users/${userId}/donations`);
-
-        // --- Data Listeners ---
-
-        const startRealTimeListeners = () => {
-            // 1. Charity Needs Listener (Public Data)
-            onSnapshot(charityNeedsPath(), (snapshot) => {
-                window.charityNeeds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                window.renderCharityNeeds(window.charityNeeds);
-                window.populateCharityDropdown(window.charityNeeds); // NEW
-                window.handleMatching();
-            }, (error) => console.error("Error fetching charity needs:", error));
-
-            // 2. Pending Donations Listener (Admin/Public Data)
-            const qPending = query(pendingDonationsPath());
-            onSnapshot(qPending, (snapshot) => {
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                window.pendingDonations = data;
-                window.renderPendingDonations(data);
-            }, (error) => console.error("Error fetching pending donations:", error));
-
-            // 3. Audit History Listener (Admin/Public Data)
-            const qAudit = query(auditHistoryPath());
-            onSnapshot(qAudit, (snapshot) => {
-                window.auditHistory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                window.renderAuditHistory(window.auditHistory);
-            }, (error) => console.error("Error fetching audit history:", error));
-
-            // 4. My Donations Listener (Private User Data)
-            if (currentUserId) {
-                const qMyDonations = query(myDonationsPath(currentUserId));
-                onSnapshot(qMyDonations, (snapshot) => {
-                    const newData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    
-                    // Check for new confirmed donations to notify the donor
-                    if (window.donorDonations && newData) {
-                        const newConfirmed = newData.filter(newD => 
-                            newD.status === 'Confirmed' && 
-                            !window.donorDonations.some(oldD => oldD.id === newD.id && oldD.status === 'Confirmed')
-                        );
-                        if (newConfirmed.length > 0) {
-                            window.renderNotifications(newConfirmed);
-                        }
-                    }
-                    
-                    window.donorDonations = newData;
-                    window.renderMyDonations(newData);
-                }, (error) => console.error("Error fetching my donations:", error));
-            }
-        };
-
-        // --- Data Submission ---
-
+        /**
+         * Sends donation data to the PHP API.
+         */
         window.handleDonationSubmit = async (event) => {
             event.preventDefault();
             
             const form = event.target;
             const formData = new FormData(form);
             const type = formData.get('donationType');
-            // READ FROM NEW DROPDOWN
             const targetCharityId = formData.get('targetCharityId'); 
             let data = {};
             let amount = 0;
 
-            // This condition is handled by mock data handler if Firebase is bypassed
-            if (!currentUserId && !FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
-                window.showModal('error', 'Authentication Required', 'Please ensure you are signed in or authenticated anonymously to make a donation.');
-                return;
-            }
-            
             if (!targetCharityId) {
-                 window.showModal('error', 'Charity Selection', 'Please select a charity partner from the dropdown.');
-                 return;
+                window.showModal('error', 'Charity Selection', 'Please select a charity partner from the dropdown.');
+                return;
             }
 
             if (type === 'financial') {
@@ -683,131 +486,120 @@
                     return;
                 }
                 data = { items: items };
-                // FIX: Explicitly set amount to 0 for non-financial types
-                amount = 0; 
+                amount = 0; // Ensure 0 for non-financial types
             } else {
                 window.showModal('error', 'Invalid Type', 'Unknown donation type selected.');
                 return;
             }
 
-            // MOCK SUBMISSION (handled above in setupMockData for bypassed mode)
-            if (FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
-                 // The mock submission logic is handled directly in setupMockData.handleDonationSubmit
-                 return window.handleDonationSubmit(event); 
-            }
-
-            // REAL FIREBASE SUBMISSION
+            // Construct payload for PHP API
+            const payload = {
+                donorId: currentUserId,
+                charityId: targetCharityId,
+                type: type,
+                amount: amount,
+                itemsData: data.items || null, // PHP will handle items_data
+            };
+            
             try {
-                const newDonation = {
-                    donorId: currentUserId,
-                    charityId: targetCharityId,
-                    type: type,
-                    data: data,
-                    amount: amount, 
-                    status: 'Pending Confirmation',
-                    timestamp: serverTimestamp(),
-                    notified: false 
-                };
-
-                const pendingRef = doc(pendingDonationsPath());
-                await setDoc(pendingRef, newDonation);
-
-                const myDonationRef = doc(myDonationsPath(currentUserId), pendingRef.id);
-                await setDoc(myDonationRef, { ...newDonation, id: pendingRef.id });
-
-                form.reset();
-                window.selectDonationType('financial'); 
-                window.showModal('success', 'Donation Logged!', `Your ${type} donation has been logged and is awaiting confirmation by the admin.`);
-            } catch (error) {
-                console.error("Error logging donation:", error);
-                window.showModal('error', 'Submission Failed', 'Could not log donation due to a database error. Check console for details.');
-            }
-        };
-
-        window.handleConfirmDonation = async (donationId, type, amount, charityId) => {
-            // MOCK CONFIRMATION (handled above in setupMockData for bypassed mode)
-            if (FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
-                 // The mock confirmation logic is handled directly in setupMockData.handleConfirmDonation
-                 return window.handleConfirmDonation(donationId, type, amount, charityId); 
-            }
-
-            // REAL FIREBASE CONFIRMATION
-            try {
-                const pendingRef = doc(pendingDonationsPath(), donationId);
-                const charityRef = doc(charityNeedsPath(), charityId);
-                const myDonationRef = doc(myDonationsPath(currentUserId), donationId);
-                const auditRef = doc(auditHistoryPath());
-
-                // 1. Get pending donation data
-                const donationSnap = await getDoc(pendingRef);
-                if (!donationSnap.exists()) throw new Error("Donation not found in pending queue.");
-                const donationData = donationSnap.data();
-
-                // 2. Update Charity Total Gained (Financial Only)
-                // FIX: Only update totalGained if type is financial
-                if (type === 'financial') {
-                    const charitySnap = await getDoc(charityRef);
-                    if (charitySnap.exists()) {
-                        const currentTotal = charitySnap.data().totalGained || 0;
-                        await updateDoc(charityRef, {
-                            totalGained: currentTotal + amount
-                        });
-                    }
-                }
-                
-                // 3. Mark the donation as Confirmed in the original pending record (which is automatically deleted in a real app, but we update status here for tracking consistency)
-                await setDoc(pendingRef, { ...donationData, status: 'Confirmed', notified: true, confirmationTimestamp: serverTimestamp() });
-                
-                // 4. Update status in Donor's private collection
-                // NOTE: This is slightly redundant as the private collection should be updated by the listener, 
-                // but we explicitly update the status to ensure the donor sees it immediately if they are signed in.
-                // We use setDoc instead of updateDoc because the ID is known.
-                await setDoc(myDonationRef, { ...donationData, status: 'Confirmed', notified: true, confirmationTimestamp: serverTimestamp() });
-
-
-                // 5. Log to Audit History
-                await setDoc(auditRef, { 
-                    ...donationData, 
-                    id: donationId, // Ensure ID is present in the audit log
-                    status: 'Confirmed',
-                    confirmationTimestamp: serverTimestamp() 
+                const response = await fetch('api_donations.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
                 });
 
-                window.showModal('success', 'Confirmation Success', `Donation ID ${donationId} confirmed and logged to audit!`);
+                const result = await response.json();
 
+                if (result.success) {
+                    form.reset();
+                    window.selectDonationType('financial');
+                    window.showModal('success', 'Donation Logged!', result.message);
+                    // Trigger a data refresh after submission
+                    await fetchDataAndRender(); 
+                } else {
+                    window.showModal('error', 'Submission Failed', result.message);
+                }
             } catch (error) {
-                console.error("Error confirming donation:", error);
-                window.showModal('error', 'Confirmation Failed', `Could not confirm donation. Error: ${error.message}`);
+                console.error("Fetch Error:", error);
+                window.showModal('error', 'Connection Error', 'Could not reach the server API (api_donations.php). Check XAMPP server.');
             }
         };
 
+
+        /**
+         * Admin confirms a donation by calling the relevant API endpoint.
+         */
+        window.handleConfirmDonation = async (donationId, type, amount, charityId) => {
+            if (userRole !== 'admin' && userRole !== 'charity') {
+                window.showModal('error', 'Permission Denied', 'You must be an authenticated administrator or charity partner to confirm donations.');
+                return;
+            }
+            
+            const payload = {
+                donationId: donationId,
+                action: 'confirm'
+            };
+
+            try {
+                // NOTE: This assumes you create an api_admin.php script
+                const response = await fetch('api_admin.php', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+
+                if (result.success) {
+                    window.showModal('success', 'Confirmation Success', result.message);
+                    await fetchDataAndRender(); // Refresh all data tables
+                } else {
+                    window.showModal('error', 'Confirmation Failed', result.message);
+                }
+            } catch (error) {
+                console.error("Confirmation Error:", error);
+                window.showModal('error', 'Network Error', 'Could not communicate with the admin API.');
+            }
+        };
+
+        /**
+         * Charity Partner updates their needs list.
+         */
         window.handleUpdateNeeds = async (event, charityId) => {
             event.preventDefault();
             const needs = document.getElementById('needs-update').value;
             
-            // MOCK UPDATE
-            if (FIREBASE_CONFIG.apiKey.includes('MOCK_API_KEY')) {
-                const charity = window.charityNeeds.find(c => c.id === charityId);
-                if (charity) {
-                    charity.needs = needs;
-                    window.showModal('success', 'Update Successful (Mock)', `Needs for ${charityId} updated locally.`);
-                    window.renderCharityNeeds(window.charityNeeds);
-                }
-                return;
-            }
+            const payload = {
+                charityId: charityId,
+                needs: needs
+            };
 
-            // REAL FIREBASE UPDATE
             try {
-                const charityRef = doc(charityNeedsPath(), charityId);
-                await updateDoc(charityRef, { needs: needs, lastUpdated: serverTimestamp() });
-                window.showModal('success', 'Update Successful', `Needs for ${charityId} published successfully.`);
+                // NOTE: This assumes you create an api_charity.php script
+                const response = await fetch('api_charity.php', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    window.showModal('success', 'Update Successful', result.message);
+                    await fetchDataAndRender(); // Refresh charity needs list
+                } else {
+                    window.showModal('error', 'Update Failed', result.message);
+                }
             } catch (error) {
-                console.error("Error updating needs:", error);
-                window.showModal('error', 'Update Failed', 'Could not update charity needs.');
+                console.error("Update Needs Error:", error);
+                window.showModal('error', 'Network Error', 'Could not communicate with the charity API.');
             }
         };
 
-        // --- Rendering Functions ---
+
+        // --- Rendering Functions (Adapted for PHP array structure) ---
         
         /**
          * Populates the Charity selection dropdown.
@@ -822,38 +614,16 @@
         }
 
         /**
-         * Renders the dynamic quote section.
-         */
-        const startQuoteRotator = () => {
-            const quoteElement = document.getElementById('quote-section').querySelector('.quote-slide');
-            let quoteIndex = Math.floor(Math.random() * motivationQuotes.length);
-
-            const rotateQuote = () => {
-                quoteElement.style.opacity = '0';
-                setTimeout(() => {
-                    quoteElement.textContent = motivationQuotes[quoteIndex];
-                    quoteElement.style.opacity = '1';
-                    quoteIndex = (quoteIndex + 1) % motivationQuotes.length;
-                }, 500); // Wait for fade out
-            };
-
-            rotateQuote(); // Initial quote
-            setInterval(rotateQuote, 8000); // Rotate every 8 seconds
-        };
-
-
-        /**
          * Renders the list of charity needs.
          */
         window.renderCharityNeeds = (needsArray) => {
             const container = document.getElementById('charity-needs-list');
-            // Determine active type based on current visible tab
             const selectedType = document.querySelector('.donation-tab:not(.hidden) input[name="donationType"]')?.value || 'financial';
             
             if (!container) return;
             
-            // Sort by totalGained descending (simulating JavaScript sorting since Firestore orderBy is avoided)
-            const sortedNeeds = [...needsArray].sort((a, b) => (b.totalGained || 0) - (a.totalGained || 0));
+            // Note: Data is already sorted by totalGained by api_stats.php
+            const sortedNeeds = needsArray; 
 
             if (sortedNeeds.length === 0) {
                 container.innerHTML = `<p class="text-gray-600 col-span-full">No active charity needs found.</p>`;
@@ -873,6 +643,9 @@
                 
                 const needsHtml = needsList.slice(0, 3).map(n => `<span class="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">${n}</span>`).join(' ');
 
+                // Ensure totalGained is treated as a number
+                const totalGained = parseFloat(charity.totalGained || 0);
+
                 return `
                     <div id="${charity.id}" class="charity-card bg-white p-6 rounded-xl shadow-md border-b-4 ${matchClass}">
                         <div class="flex items-center justify-between mb-3">
@@ -880,7 +653,7 @@
                             <div class="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${charity.region}</div>
                         </div>
                         <p class="text-sm text-gray-600 mb-3">ID: ${charity.id}</p>
-                        <p class="text-sm font-semibold text-gray-700 mb-2">Total Gained: <span class="text-green-600 font-extrabold">${(charity.totalGained || 0).toLocaleString()} BDT</span></p>
+                        <p class="text-sm font-semibold text-gray-700 mb-2">Total Gained: <span class="text-green-600 font-extrabold">${totalGained.toLocaleString(undefined, { minimumFractionDigits: 2 })} BDT</span></p>
                         
                         <p class="text-xs font-medium text-gray-700 mb-3">${matchIcon} Top Needs:</p>
                         <div class="space-x-1 space-y-1">${needsHtml}</div>
@@ -888,7 +661,6 @@
                 `;
             }).join('');
 
-            // Also populate the dropdown list whenever charity data updates
             populateCharityDropdown(needsArray);
         };
 
@@ -900,8 +672,8 @@
             const tbody = document.getElementById('my-donations-table');
             if (!tbody) return;
 
-            // Sort by timestamp descending
-            const sortedDonations = [...donations].sort((a, b) => (b.timestamp?.toDate ? b.timestamp.toDate().getTime() : b.timestamp?.getTime() || 0) - (a.timestamp?.toDate ? a.timestamp.toDate().getTime() : a.timestamp?.getTime() || 0));
+            // Sort by created_at descending (PHP returns timestamps as strings)
+            const sortedDonations = [...donations].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
             if (sortedDonations.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">No donations tracked yet.</td></tr>`;
@@ -909,14 +681,14 @@
             }
 
             tbody.innerHTML = sortedDonations.map(d => {
-                const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : (d.timestamp?.toLocaleDateString() || 'N/A');
+                const date = d.created_at ? new Date(d.created_at).toLocaleDateString() : 'N/A';
                 const statusClass = d.status === 'Confirmed' ? 'text-green-600 font-bold' : 'text-yellow-600';
                 
                 let details;
-                if (d.data && d.data.items) {
-                    details = d.data.items;
+                if (d.items_data) {
+                    details = d.items_data;
                 } else if (d.type === 'financial' && d.amount !== undefined) {
-                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                    details = `${parseFloat(d.amount || 0).toLocaleString()} BDT`;
                 } else {
                     details = 'N/A';
                 }
@@ -941,8 +713,8 @@
 
             const pending = donations.filter(d => d.status === 'Pending Confirmation');
             
-            // Sort by timestamp descending
-            pending.sort((a, b) => (b.timestamp?.toDate ? b.timestamp.toDate().getTime() : b.timestamp?.getTime() || 0) - (a.timestamp?.toDate ? a.timestamp.toDate().getTime() : a.timestamp?.getTime() || 0));
+            // Sort by created_at descending
+            pending.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             
             if (pending.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">No pending donations to review.</td></tr>`;
@@ -950,36 +722,29 @@
             }
 
             tbody.innerHTML = pending.map(d => {
-                const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : (d.timestamp?.toLocaleDateString() || 'N/A');
+                const date = d.created_at ? new Date(d.created_at).toLocaleDateString() : 'N/A';
                 
-                // --- FIX: Robustly determine details display ---
                 let details;
-                if (d.data && d.data.items) {
-                    // Item donation (Food/Goods): Display the item description
-                    details = d.data.items;
+                if (d.items_data) {
+                    details = d.items_data;
                 } else if (d.type === 'financial' && d.amount !== undefined) {
-                    // Financial donation: Display the amount
-                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                    details = `${parseFloat(d.amount || 0).toLocaleString()} BDT`;
                 } else {
-                    details = 'N/A (Corrupted)';
+                    details = 'N/A';
                 }
-                // --- END FIX ---
                 
-                // FIX: Get capitalized type name for display
                 const typeDisplay = d.type.charAt(0).toUpperCase() + d.type.slice(1);
-                
-                // Ensure amount is safe for inline function call (0 for non-financial)
-                const amount = d.amount || 0; 
+                const amount = parseFloat(d.amount || 0);
 
                 return `
                     <tr class="hover:bg-yellow-50">
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${typeDisplay}</td>
                         <td class="px-4 py-4 whitespace-pre-wrap text-sm text-gray-700 max-w-xs">${details}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charityId}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charity_id}</td>
                         <td class="px-4 py-4 whitespace-nowrap">
                             <button class="dynamic-btn bg-green-500 text-white text-xs px-3 py-1 rounded-lg hover:bg-green-600" 
-                                onclick="window.handleConfirmDonation('${d.id}', '${d.type}', ${amount}, '${d.charityId}')">
+                                onclick="window.handleConfirmDonation('${d.donation_id}', '${d.type}', ${amount}, '${d.charity_id}')">
                                 Confirm & Log
                             </button>
                         </td>
@@ -989,7 +754,7 @@
         };
 
         /**
-         * Renders the admin audit history table.
+         * Renders the admin audit history table (confirmed donations).
          */
         window.renderAuditHistory = (history) => {
             const tbody = document.getElementById('audit-history-table');
@@ -1000,22 +765,20 @@
                 return;
             }
 
-            // Sort by confirmationTimestamp descending
-            history.sort((a, b) => (b.confirmationTimestamp?.toDate ? b.confirmationTimestamp.toDate().getTime() : b.confirmationTimestamp?.getTime() || 0) - (a.confirmationTimestamp?.toDate ? a.confirmationTimestamp.toDate().getTime() : a.confirmationTimestamp?.getTime() || 0));
+            // Sort by confirmed_at descending
+            history.sort((a, b) => new Date(b.confirmed_at) - new Date(a.confirmed_at));
 
             tbody.innerHTML = history.map(d => {
-                const date = d.confirmationTimestamp?.toDate ? d.confirmationTimestamp.toDate().toLocaleDateString() : (d.confirmationTimestamp?.toLocaleDateString() || 'N/A');
+                const date = d.confirmed_at ? new Date(d.confirmed_at).toLocaleDateString() : 'N/A';
                 
-                // --- FIX: Robustly determine details display ---
                 let details;
-                if (d.data && d.data.items) {
-                    details = d.data.items;
+                if (d.items_data) {
+                    details = d.items_data;
                 } else if (d.type === 'financial' && d.amount !== undefined) {
-                    details = `${(d.amount || 0).toLocaleString()} BDT`;
+                    details = `${parseFloat(d.amount || 0).toLocaleString()} BDT`;
                 } else {
-                    details = 'N/A (Corrupted)';
+                    details = 'N/A';
                 }
-                // --- END FIX ---
                 
                 const typeDisplay = d.type.charAt(0).toUpperCase() + d.type.slice(1);
 
@@ -1025,52 +788,134 @@
                         <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
                         <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${typeDisplay}</td>
                         <td class="px-4 py-4 whitespace-pre-wrap text-sm text-gray-700 max-w-xs">${details}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charityId}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">${d.charity_id}</td>
                     </tr>
                 `;
             }).join('');
         };
 
 
+        // --- Data Fetching & Polling ---
+        
         /**
-         * Renders the donor notifications.
+         * Fetches all required data from PHP APIs and updates the UI.
          */
-        window.renderNotifications = (newlyConfirmed) => {
-            const countSpan = document.getElementById('notification-count');
-            const list = document.getElementById('notification-list');
+        const fetchDataAndRender = async () => {
+            try {
+                // Fetch All Data (Needs, Pending, Audit, My Donations)
+                const [statsResponse, pendingResponse, auditResponse, myDonationsResponse] = await Promise.all([
+                    fetch('api_stats.php').then(r => r.json()),
+                    fetch('api_donations.php?status=pending').then(r => r.json()), // Assumes a GET endpoint to fetch pending
+                    fetch('api_donations.php?status=confirmed_history').then(r => r.json()), // Assumes a GET endpoint to fetch audit
+                    fetch(`api_donations.php?donorId=${currentUserId}&status=all`).then(r => r.json()) // Assumes a GET endpoint to fetch user's history
+                ]);
+                
+                // 1. Stats and Charity Needs (from api_stats.php)
+                if (statsResponse.success) {
+                    renderStats(statsResponse.stats);
+                    window.charityNeeds = statsResponse.charityNeeds;
+                    window.renderCharityNeeds(window.charityNeeds);
+                }
 
-            window.lastNotificationCount += newlyConfirmed.length;
-            
-            if (window.lastNotificationCount > 0) {
-                countSpan.textContent = window.lastNotificationCount;
-                countSpan.classList.remove('opacity-0');
+                // 2. Pending Donations (for Admin)
+                if (pendingResponse.success) {
+                    window.pendingDonations = pendingResponse.donations;
+                    window.renderPendingDonations(window.pendingDonations);
+                }
+
+                // 3. Audit History (for Admin)
+                if (auditResponse.success) {
+                    window.auditHistory = auditResponse.donations;
+                    window.renderAuditHistory(window.auditHistory.filter(d => d.status === 'Confirmed'));
+                }
+
+                // 4. My Donations (for Donor)
+                if (myDonationsResponse.success) {
+                    window.donorDonations = myDonationsResponse.donations;
+                    window.renderMyDonations(window.donorDonations);
+                }
+
+                window.handleMatching();
+
+            } catch (error) {
+                console.error("Error during data polling:", error);
+                // We show an error but don't halt the app
             }
-
-            const newHtml = newlyConfirmed.map(d => {
-                const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : (d.timestamp?.toLocaleDateString() || 'N/A');
-                const details = d.type === 'financial' ? `${d.amount.toLocaleString()} BDT` : `${d.type.charAt(0).toUpperCase() + d.type.slice(1)} items`;
-                return `
-                    <div class="p-3 hover:bg-green-50 flex justify-between items-center text-sm">
-                        <div>
-                            <p class="font-semibold text-green-700">✅ Your ${d.type} donation to ${d.charityId} was confirmed!</p>
-                            <p class="text-xs text-gray-500">${details} on ${date}</p>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            // Prepend new notifications
-            const noMessage = list.querySelector('.text-center.italic');
-            if(noMessage) noMessage.remove();
-            list.insertAdjacentHTML('afterbegin', newHtml);
         };
+
+        /**
+         * Main initial setup function.
+         */
+        const setupApp = async () => {
+            window.selectDonationType('financial');
+            startQuoteRotator();
+            
+            // Initial data fetch (blocking)
+            try {
+                const response = await fetch('api_stats.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Load required global data
+                    window.charityNeeds = data.charityNeeds;
+                    
+                    // Render UI components
+                    renderStats(data.stats); // Display initial counts
+                    window.renderCharityNeeds(window.charityNeeds);
+                    
+                    // Fetch and render all other data for the first time
+                    await fetchDataAndRender(); 
+
+                    // Start regular polling for data updates (replaces real-time listener)
+                    setInterval(fetchDataAndRender, 10000); // Poll every 10 seconds
+
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                console.error("Initialization Failed:", error);
+                window.showModal('error', 'System Failure', 'Could not fetch initial data from the MySQL API. Check XAMPP and PHP files.');
+            } finally {
+                // Remove loader and show content regardless of API success
+                document.getElementById('app-loader').classList.add('opacity-0');
+                setTimeout(() => {
+                    document.getElementById('app-loader').classList.add('hidden');
+                    document.getElementById('app-content').classList.remove('hidden');
+                    window.updateRoleView(userRole); 
+                }, 500); 
+            }
+        };
+
 
         // --- UI Logic and Toggles ---
 
         /**
+         * Renders the dynamic quote section.
+         */
+        const startQuoteRotator = () => {
+            const quoteElement = document.getElementById('quote-section').querySelector('.quote-slide');
+            let quoteIndex = Math.floor(Math.random() * motivationQuotes.length);
+
+            const rotateQuote = () => {
+                quoteElement.style.opacity = '0';
+                setTimeout(() => {
+                    quoteElement.textContent = motivationQuotes[quoteIndex];
+                    quoteElement.style.opacity = '1';
+                    quoteIndex = (quoteIndex + 1) % motivationQuotes.length;
+                }, 500); // Wait for fade out
+            };
+
+            rotateQuote(); // Initial quote
+            setInterval(rotateQuote, 8000); // Rotate every 8 seconds
+        };
+        
+        // ... (Keep the rest of the UI/Modal logic as is)
+        
+        /**
          * Updates the UI based on the current user role.
          */
         window.updateRoleView = (role) => {
+            // ... (Keep existing updateRoleView logic)
             const banner = document.getElementById('role-banner');
             const toggleBtn = document.getElementById('role-toggle-btn');
             const donorView = document.getElementById('donor-view');
@@ -1110,9 +955,9 @@
                     const charityId = document.getElementById('login-id')?.value?.toLowerCase() || 'brac'; // Fallback
                     const charityInfo = window.charityNeeds.find(c => c.id === charityId);
                     if (charityInfo) {
-                         document.getElementById('charity-info').innerHTML = `<p class="text-xl font-bold">${charityInfo.name}</p><p class="text-sm text-gray-500">ID: ${charityId}</p>`;
-                         document.getElementById('needs-update').value = charityInfo.needs || '';
-                         document.getElementById('update-needs-form').onsubmit = (e) => window.handleUpdateNeeds(e, charityId);
+                            document.getElementById('charity-info').innerHTML = `<p class="text-xl font-bold">${charityInfo.name}</p><p class="text-sm text-gray-500">ID: ${charityId}</p>`;
+                            document.getElementById('needs-update').value = charityInfo.needs || '';
+                            document.getElementById('update-needs-form').onsubmit = (e) => window.handleUpdateNeeds(e, charityId);
                     }
                     banner.className = 'mb-6 p-4 rounded-lg text-center font-bold text-lg shadow-md bg-teal-100 text-teal-800 transition-colors';
                     banner.textContent = `CHARITY PARTNER PORTAL (${charityId.toUpperCase()})`;
@@ -1129,15 +974,11 @@
             if (userRole === 'donor') {
                 updateRoleView('login');
             } else {
-                if (auth && auth.currentUser) {
-                    await auth.signOut();
-                }
-                
-                // FIX: Clear login fields on sign out to ensure state reset
+                // Clear local credentials on sign out
                 document.getElementById('login-id').value = '';
                 document.getElementById('login-password').value = '';
+                currentUserId = 'anonymous-' + Math.random().toString(36).substring(2, 9);
                 
-                // Reset everything to donor view
                 window.lastNotificationCount = 0;
                 document.getElementById('notification-count').classList.add('opacity-0');
                 updateRoleView('donor');
@@ -1176,14 +1017,11 @@
         };
 
         window.handleMatching = (selectedType = null) => {
-            // Guard clause to prevent errors if data hasn't loaded yet
             if (!window.charityNeeds || window.charityNeeds.length === 0) return;
-
-            const activeType = selectedType || document.querySelector('.donation-tab:not(.hidden) input[name="donationType"]')?.value || 'financial';
-            // Re-render charity list to ensure matching is based on the selected type
+            // Rerenders charity list which applies the highlight based on selected type
             window.renderCharityNeeds(window.charityNeeds); 
         };
-        
+
         // --- Modal Logic ---
 
         const modalBackdrop = document.getElementById('modal-backdrop');
@@ -1193,7 +1031,7 @@
         const modalCloseBtn = document.getElementById('modal-close-button');
 
         window.showModal = (type, title, message) => {
-            modalTitle.innerHTML = ''; // Clear previous content
+            modalTitle.innerHTML = ''; 
 
             if (type === 'success') {
                 modalHeader.className = 'p-4 flex items-center justify-between text-white bg-green-500';
@@ -1218,27 +1056,34 @@
             modalBackdrop.classList.add('hidden');
         };
 
-        // --- Auth Implementation ---
-
+        // --- Event Listeners ---
+        
         document.getElementById('login-form').addEventListener('submit', async (event) => {
             event.preventDefault();
             const id = document.getElementById('login-id').value.toLowerCase();
             const password = document.getElementById('login-password').value;
 
+            // In a real application, this would call api_auth.php which checks MySQL
+            // For now, we use the hardcoded check for demonstration:
+            
+            // 1. Admin Check
             if (id === 'admin' && password === 'uniadmin') {
                 window.showModal('success', 'Admin Login Success', 'Welcome to the Administrator Portal.');
+                currentUserId = id;
                 window.updateRoleView('admin');
                 return;
             }
 
-            const charity = MOCK_CHARITIES.find(c => c.id === id);
-            if (charity && charity.password === password) {
+            // 2. Charity Check
+            const charity = MOCK_CHARITIES.find(c => c.id === id); 
+            if (charity && charity.password === password) { 
                 window.showModal('success', 'Charity Login Success', `Welcome, ${charity.name} Partner!`);
+                currentUserId = id;
                 window.updateRoleView('charity');
                 return;
             }
 
-            window.showModal('error', 'Login Failed', 'Invalid User ID or Password.');
+            window.showModal('error', 'Login Failed', 'Invalid User ID or Password. (Check `admin`/`uniadmin` or a charity ID/pass)');
         });
 
         window.toggleNotifications = () => {
@@ -1250,17 +1095,7 @@
             }
         };
 
-
-        // --- Application Setup ---
-
-        const setupApp = () => {
-            window.selectDonationType('financial');
-            startQuoteRotator();
-            initializeFirebase(); 
-        };
-
         document.addEventListener('DOMContentLoaded', setupApp);
-
     </script>
 </body>
 </html>
