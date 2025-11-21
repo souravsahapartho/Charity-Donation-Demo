@@ -3,12 +3,14 @@
 header('Content-Type: application/json');
 require_once 'db_connect.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed. Use POST for submission.']);
-    exit;
-}
+// 1. ALLOW FORM DATA INSTEAD OF JSON
+$charityId = $_POST['charityId'] ?? '';
+$type      = $_POST['type'] ?? '';
+$donorId   = $_POST['donorId'] ?? 'anonymous';
+$itemsData = $_POST['itemsData'] ?? null;
+$amount    = $_POST['amount'] ?? 0.00;
 
+// 2. CONNECT
 $conn = getDBConnection();
 if (!$conn) {
     http_response_code(500);
@@ -16,28 +18,20 @@ if (!$conn) {
     exit;
 }
 
-$data = json_decode(file_get_contents('php://input'), true);
-
-// Sanitize and validate inputs
-$charityId = filter_var($data['charityId'] ?? '', FILTER_SANITIZE_STRING);
-$type = filter_var($data['type'] ?? '', FILTER_SANITIZE_STRING);
-$donorId = filter_var($data['donorId'] ?? 'anonymous', FILTER_SANITIZE_STRING);
-$itemsData = filter_var($data['itemsData'] ?? null, FILTER_SANITIZE_STRING);
-$amount = filter_var($data['amount'] ?? 0.00, FILTER_VALIDATE_FLOAT);
-
+// 3. VALIDATION
 if (!$charityId || !in_array($type, ['financial', 'food', 'goods'])) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Invalid or missing required fields.']);
+    echo json_encode(['success' => false, 'message' => 'Invalid or missing required fields (POST).']);
     closeDBConnection();
     exit;
 }
 
-// Ensure non-financial types have items data, and financial types have a valid amount
+// 4. LOGIC
 if ($type !== 'financial') {
     $amount = 0.00;
     if (!$itemsData) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Item details are required for non-financial donations.']);
+        echo json_encode(['success' => false, 'message' => 'Item details are required.']);
         closeDBConnection();
         exit;
     }
@@ -48,19 +42,17 @@ if ($type !== 'financial') {
     exit;
 }
 
-// Insert into donations table (status defaults to 'Pending Confirmation')
+// 5. INSERT
 $sql = "INSERT INTO donations (charity_id, donor_id, type, amount, items_data, status) VALUES (?, ?, ?, ?, ?, 'Pending Confirmation')";
 
 $stmt = $conn->prepare($sql);
-// 'ssds' means string, string, double, string
 $stmt->bind_param("ssds", $charityId, $donorId, $type, $amount, $itemsData); 
 
 if ($stmt->execute()) {
-    echo json_encode(['success' => true, 'message' => 'Donation logged successfully and is pending confirmation.']);
+    echo json_encode(['success' => true, 'message' => 'Donation logged successfully!']);
 } else {
     http_response_code(500);
-    error_log("SQL Error: " . $stmt->error);
-    echo json_encode(['success' => false, 'message' => 'Failed to execute statement: ' . $stmt->error]);
+    echo json_encode(['success' => false, 'message' => 'SQL Error: ' . $stmt->error]);
 }
 
 $stmt->close();

@@ -457,6 +457,9 @@
         /**
          * Sends donation data to the PHP API.
          */
+        /**
+         * Sends donation data to the PHP API using FORM DATA (Fix for InfinityFree 400 Error)
+         */
         window.handleDonationSubmit = async (event) => {
             event.preventDefault();
             
@@ -464,51 +467,50 @@
             const formData = new FormData(form);
             const type = formData.get('donationType');
             const targetCharityId = formData.get('targetCharityId'); 
-            let data = {};
+            let itemsText = "";
             let amount = 0;
 
             if (!targetCharityId) {
-                window.showModal('error', 'Charity Selection', 'Please select a charity partner from the dropdown.');
+                window.showModal('error', 'Charity Selection', 'Please select a charity partner.');
                 return;
             }
 
             if (type === 'financial') {
                 amount = parseFloat(formData.get('amount'));
                 if (isNaN(amount) || amount <= 0) {
-                    window.showModal('error', 'Invalid Amount', 'Please enter a valid financial amount greater than zero.');
+                    window.showModal('error', 'Invalid Amount', 'Please enter a valid amount.');
                     return;
                 }
-                data = { amount: amount };
-            } else if (type === 'food' || type === 'goods') {
-                const items = formData.get('items').trim();
-                if (!items) {
-                    window.showModal('error', 'Missing Details', `Please list the items you wish to donate under the ${type} category.`);
-                    return;
-                }
-                data = { items: items };
-                amount = 0; // Ensure 0 for non-financial types
             } else {
-                window.showModal('error', 'Invalid Type', 'Unknown donation type selected.');
-                return;
+                itemsText = formData.get('items').trim();
+                if (!itemsText) {
+                    window.showModal('error', 'Missing Details', `Please list the items.`);
+                    return;
+                }
+                amount = 0;
             }
 
-            // Construct payload for PHP API
-            const payload = {
-                donorId: currentUserId,
-                charityId: targetCharityId,
-                type: type,
-                amount: amount,
-                itemsData: data.items || null, // PHP will handle items_data
-            };
+            // --- THE FIX: USE URLSearchParams INSTEAD OF JSON ---
+            const payload = new URLSearchParams();
+            payload.append('donorId', currentUserId);
+            payload.append('charityId', targetCharityId);
+            payload.append('type', type);
+            payload.append('amount', amount);
+            payload.append('itemsData', itemsText); // PHP expects 'itemsData'
             
             try {
                 const response = await fetch('api_donations.php', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded', // This is what the firewall likes!
                     },
-                    body: JSON.stringify(payload)
+                    body: payload
                 });
+
+                // Check if response is okay before trying to read JSON
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status} ${response.statusText}`);
+                }
 
                 const result = await response.json();
 
@@ -516,14 +518,13 @@
                     form.reset();
                     window.selectDonationType('financial');
                     window.showModal('success', 'Donation Logged!', result.message);
-                    // Trigger a data refresh after submission
                     await fetchDataAndRender(); 
                 } else {
                     window.showModal('error', 'Submission Failed', result.message);
                 }
             } catch (error) {
                 console.error("Fetch Error:", error);
-                window.showModal('error', 'Connection Error', 'Could not reach the server API (api_donations.php). Check XAMPP server.');
+                window.showModal('error', 'Connection Error', 'Failed to connect. ' + error.message);
             }
         };
 
