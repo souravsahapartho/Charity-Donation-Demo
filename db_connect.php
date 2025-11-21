@@ -1,34 +1,33 @@
 <?php
 // db_connect.php
-define('DB_SERVER', 'localhost');
-define('DB_USERNAME', 'root');
-define('DB_PASSWORD', '');
-define('DB_NAME', 'UniDonateDB'); 
-
-$mysqli = null;
 
 function getDBConnection() {
-    global $mysqli;
-    if ($mysqli) {
-        return $mysqli;
-    }
+    // -----------------------------------------------------------
+    // FILL THESE WITH YOUR INFINITYFREE DETAILS
+    // -----------------------------------------------------------
+    $servername = "sql300.infinityfree.com";  // MySQL Hostname
+    $username   = "if0_40476456";             // MySQL Username
+    $password   = "4rlXi1hL7j";       // Your Hosting Password
+    $dbname     = "if0_40476456_unidonate";   // Database Name
+    // -----------------------------------------------------------
 
-    $mysqli = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
+    $conn = new mysqli($servername, $username, $password, $dbname);
 
-    if ($mysqli->connect_error) {
-        error_log("Connection failed: " . $mysqli->connect_error);
-        return false;
+    // Check connection
+    if ($conn->connect_error) {
+        // This writes the error to a hidden server log instead of showing it to the user
+        error_log("Connection failed: " . $conn->connect_error);
+        return null;
     }
     
-    $mysqli->set_charset("utf8mb4");
-    return $mysqli;
+    $conn->set_charset("utf8mb4");
+    return $conn;
 }
 
 function closeDBConnection() {
-    global $mysqli;
-    if ($mysqli) {
-        $mysqli->close();
-        $mysqli = null;
+    global $conn;
+    if (isset($conn) && $conn instanceof mysqli) {
+        $conn->close();
     }
 }
 ?>
